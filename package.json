@@ -1,0 +1,30 @@
+{
+  "name": "siger-rh",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build && node scripts/pos-build.mjs",
+    "build:hostgator": "npm run build && node scripts/pacote-hostgator.mjs",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.1.1",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
+    "lucide-react": "^1.49.0",
+    "next": "15.4.11",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.11",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

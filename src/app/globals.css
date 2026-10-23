@@ -1,0 +1,148 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Cores Primárias e Institucionais FSPSS / SESAU */
+  --color-electric-cobalt: #004aad;
+  --color-deep-cobalt: #003b8a;
+  --color-powder-blue: #cfe0f8;
+  --color-lavender-mist: #edf3fc;
+
+  /* Superfícies e Fundos */
+  --color-canvas-cream: #ffffff;
+  --color-surface-ivory: #ffffff;
+  --color-pure-white: #ffffff;
+  --color-hairline: #e2e8f0;
+  --color-faint-gray: #f8fafc;
+
+  /* Escala de Textos e Grafites */
+  --color-ink-charcoal: #0f172a;
+  --color-deep-ink: #1e293b;
+  --color-mid-graphite: #334155;
+  --color-slate-gray: #64748b;
+  --color-steel-gray: #94a3b8;
+
+  /* Cores Semânticas de Status */
+  --color-forest: #046645;
+  --color-forest-light: #e6f4ea;
+  --color-warning: #b7791f;
+  --color-warning-light: #fef3c7;
+  --color-danger: #c94a4a;
+  --color-danger-light: #fde8e8;
+
+  /* Aliases compatíveis com o código existente */
+  --color-papel: #f8fafc;
+  --color-tinta: #0f172a;
+  --color-tinta-suave: #64748b;
+  --color-linha: #e2e8f0;
+
+  --color-pinho: #046645;
+  --color-pinho-escuro: #034b33;
+  --color-pinho-claro: #e6f4ea;
+
+  --color-ocre: #b7791f;
+  --color-ocre-escuro: #975a16;
+  --color-ocre-claro: #fef3c7;
+
+  --color-erro: #c94a4a;
+  --color-erro-claro: #fde8e8;
+  --color-azul: #004aad;
+  --color-azul-claro: #edf3fc;
+
+  --color-acento: #004aad;
+  --color-acento-escuro: #003b8a;
+  --color-acento-claro: #cfe0f8;
+  --color-azul-escuro: #003b8a;
+
+  --shadow-subtle: rgba(0, 0, 0, 0.05) 0px 1px 2px 0px, rgba(0, 0, 0, 0.03) 0px -1px 1px 0px inset, rgba(0, 0, 0, 0.08) 0px 0px 0px 1px inset;
+}
+
+:root {
+  --shadow-subtle: rgba(0, 0, 0, 0.05) 0px 1px 2px 0px, 
+                   rgba(0, 0, 0, 0.03) 0px -1px 1px 0px inset, 
+                   rgba(0, 0, 0, 0.08) 0px 0px 0px 1px inset;
+  --shadow-lg: rgba(0, 0, 0, 0.08) 0px 20px 25px -5px, 
+               rgba(0, 0, 0, 0.04) 0px 10px 10px -5px;
+}
+
+body {
+  background-color: var(--color-papel);
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+  font-feature-settings: 'tnum' 1, 'ss01' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-electric-cobalt);
+  outline-offset: 2px;
+}
+
+/* Componentes do Design System SIGER */
+.dock-card {
+  background-color: #ffffff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 16px;
+  box-shadow: var(--shadow-subtle);
+}
+
+.dock-btn-primary {
+  background-color: var(--color-electric-cobalt);
+  color: #ffffff;
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 48px;
+  padding: 10px 20px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.05s ease;
+}
+
+.dock-btn-primary:hover {
+  background-color: var(--color-deep-cobalt);
+}
+
+.dock-btn-primary:active {
+  transform: scale(0.98);
+}
+
+.dock-btn-ghost {
+  background-color: #ffffff;
+  color: var(--color-ink-charcoal);
+  font-weight: 500;
+  font-size: 14px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 48px;
+  padding: 10px 20px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-btn-ghost:hover {
+  background-color: var(--color-faint-gray);
+  border-color: var(--color-steel-gray);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* Impressão oficial */
+@page { size: A4; margin: 12mm; }
+@media print {
+  aside, header, button, [role='tablist'], nav { display: none !important; }
+  body { background: white; }
+  main { padding: 0 !important; }
+}
