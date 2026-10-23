@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from 'next';
+import { normalizarUrl } from '@/lib/url';
 import '@fontsource-variable/inter';
 
 import './globals.css';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+  metadataBase: new URL(normalizarUrl(process.env.NEXT_PUBLIC_SITE_URL) ?? 'http://localhost:3000'),
   title: 'SIGER RH | Ajustes de ponto e folgas',
   description: 'Sistema Integrado de Gestão e Relatórios: Recursos Humanos | FSPSS e Secretaria de Saúde de São Sebastião',
   robots: { index: false, follow: false },

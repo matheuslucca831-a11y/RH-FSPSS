@@ -25,7 +25,12 @@ function variavel(nome) {
 }
 const supabase = variavel('NEXT_PUBLIC_SUPABASE_URL');
 if (!supabase) throw new Error('NEXT_PUBLIC_SUPABASE_URL não definida (.env.local ou variável de ambiente).');
-const u = new URL(supabase);
+let u;
+try {
+  u = new URL(/^https?:\/\//i.test(supabase.trim()) ? supabase.trim() : `https://${supabase.trim()}`);
+} catch {
+  throw new Error('NEXT_PUBLIC_SUPABASE_URL inválida. Use o endereço completo, por exemplo https://abcdefgh.supabase.co');
+}
 const conexoes = [`${u.origin}`, `${u.protocol === 'https:' ? 'wss' : 'ws'}://${u.host}`];
 
 function politica(hashes) {
