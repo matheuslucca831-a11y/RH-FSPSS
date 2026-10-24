@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Building2, CheckCircle2, Loader2, LogOut, Menu, Search, ShieldCheck, WifiOff, X } from 'lucide-react';
 import { definirDonoCache } from '@/lib/cacheTela';
 import { createClient } from '@/lib/supabase/client';
+import { contarFila } from '@/lib/fila';
 import { sairDoSistema, usePerfil } from '@/lib/contextoPerfil';
 import { rotasDo } from '@/lib/rotas';
 import { PAPEIS, type Perfil } from '@/lib/types';
@@ -32,7 +33,7 @@ export default function Shell({ perfil, children }: { perfil: Perfil; children: 
   const areaAvisos = useRef<HTMLDivElement>(null);
 
   const itens = rotasDo(perfil.papel);
-  const local = perfil.papel === 'direcao' ? 'Sede' : perfil.unidade?.nome ?? 'Unidade';
+  const local = perfil.unidade?.nome ?? (perfil.papel === 'funcionario' ? 'Unidade' : 'Sede');
   const direcao = perfil.papel === 'direcao';
 
   definirDonoCache(perfil.id);
@@ -62,15 +63,7 @@ export default function Shell({ perfil, children }: { perfil: Perfil; children: 
     let vivo = true;
     async function contar() {
       const novo: Record<string, number> = {};
-      const conta = () => supabase.from('solicitacoes').select('id', { count: 'exact', head: true });
-      if (perfil.papel === 'chefia') {
-        const { count } = await conta().eq('situacao', 'Aguardando chefia').eq('unidade_id', perfil.unidade_id!).neq('solicitante_id', perfil.id);
-        novo['/aprovacoes'] = count ?? 0;
-      }
-      if (perfil.papel === 'direcao') {
-        const { count } = await conta().eq('situacao', 'Aguardando direção').neq('solicitante_id', perfil.id);
-        novo['/decisoes'] = count ?? 0;
-      }
+      if (perfil.papel !== 'funcionario') novo['/aprovacoes'] = await contarFila(supabase);
       if (vivo) setPendentes(novo);
     }
     contar();
@@ -99,7 +92,7 @@ export default function Shell({ perfil, children }: { perfil: Perfil; children: 
   function buscar(e: React.FormEvent) {
     e.preventDefault();
     const q = busca.trim().slice(0, 80);
-    const destino = direcao ? '/todas' : perfil.papel === 'chefia' ? '/aprovacoes' : '/minhas';
+    const destino = direcao || perfil.papel === 'coordenacao' ? '/todas' : perfil.papel !== 'funcionario' ? '/aprovacoes' : '/minhas';
     router.push(q ? `${destino}?q=${encodeURIComponent(q)}` : destino);
   }
 
@@ -221,7 +214,7 @@ export default function Shell({ perfil, children }: { perfil: Perfil; children: 
               <Search className="size-4" />
             </button>
             <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} maxLength={80}
-              placeholder={direcao ? 'Buscar por nome, matrícula ou protocolo' : perfil.papel === 'chefia' ? 'Buscar pedido da equipe' : 'Buscar nos meus pedidos'}
+              placeholder={direcao ? 'Buscar por nome, matrícula ou protocolo' : perfil.papel !== 'funcionario' ? 'Buscar pedido da equipe' : 'Buscar nos meus pedidos'}
               aria-label="Buscar" className="w-full bg-transparent text-xs text-white placeholder-white/70 outline-none" />
           </form>
 
@@ -261,7 +254,7 @@ export default function Shell({ perfil, children }: { perfil: Perfil; children: 
                         {Object.entries(pendentes).filter(([, n]) => n > 0).map(([rota, n]) => (
                           <li key={rota}>
                             <Link href={rota} onClick={() => setAvisosAbertos(false)} className="block rounded-xl px-3 py-2 text-xs hover:bg-faint-gray">
-                              <strong>{n}</strong> {n === 1 ? 'pedido aguarda' : 'pedidos aguardam'} {rota === '/decisoes' ? 'a decisão da Direção' : 'a sua análise'}
+                              <strong>{n}</strong> {n === 1 ? 'pedido aguarda' : 'pedidos aguardam'} a sua assinatura
                             </Link>
                           </li>
                         ))}

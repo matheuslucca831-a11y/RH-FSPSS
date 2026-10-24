@@ -12,7 +12,10 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const ORIGENS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MATRICULA = /^[A-Za-z0-9._]{1,40}$/;
-const PAPEIS = ['funcionario', 'chefia', 'direcao'];
+const PAPEIS = ['funcionario', 'enfermeiro', 'gerente', 'supervisor', 'coordenacao', 'direcao'];
+const GRUPOS = ['geral', 'farmacia', 'enfermeiro', 'gerente'];
+// Sem unidade obrigatória (Supervisor pode ter lotação; Coordenação e Direção ficam na Sede)
+const SEM_UNIDADE = ['supervisor', 'coordenacao', 'direcao'];
 const COMUNS = ['12345678', '123456789', '1234567890', 'senha123', 'senha1234', 'password1', 'abc12345', 'fspss123', 'mudar123', 'qwerty123'];
 
 function cabecalhos(req: Request) {
@@ -98,7 +101,8 @@ Deno.serve(async (req) => {
     const senha = String(corpo.senha ?? '');
     const cargo = String(corpo.cargo ?? '').trim().slice(0, 120) || null;
     const papel = PAPEIS.includes(corpo.papel) ? corpo.papel : null;
-    const unidadeId = papel && papel !== 'direcao' ? String(corpo.unidade_id ?? '') : null;
+    const grupo = GRUPOS.includes(corpo.grupo_cargo) ? corpo.grupo_cargo : 'geral';
+    const unidadeId = papel && !['coordenacao', 'direcao'].includes(papel) && corpo.unidade_id ? String(corpo.unidade_id) : null;
 
     if (nome.length < 2) return resposta({ erro: 'Informe o nome.' });
     if (!MATRICULA.test(matricula)) return resposta({ erro: 'Matrícula inválida (use só letras, números e ponto).' });
@@ -106,7 +110,8 @@ Deno.serve(async (req) => {
     const p = problemaSenha(senha, matricula);
     if (p) return resposta({ erro: p });
     if (!papel) return resposta({ erro: 'Escolha o tipo de acesso.' });
-    if (papel !== 'direcao') {
+    if (!SEM_UNIDADE.includes(papel) && !unidadeId) return resposta({ erro: 'Escolha a unidade.' });
+    if (unidadeId) {
       const { data: un } = await admin.from('unidades').select('id').eq('id', unidadeId).eq('ativa', true).maybeSingle();
       if (!un) return resposta({ erro: 'Escolha uma unidade ativa.' });
     }
@@ -119,14 +124,14 @@ Deno.serve(async (req) => {
       return resposta({ erro: jaExiste ? 'Já existe um login com esta matrícula.' : 'Não foi possível criar o login. Veja os Logs da função.' });
     }
     const { error: e2 } = await admin.from('perfis').insert({
-      id: criado.user.id, nome, matricula, email, cargo, papel, unidade_id: unidadeId, ativo: true, deve_trocar_senha: true,
+      id: criado.user.id, nome, matricula, email, cargo, papel, grupo_cargo: grupo, unidade_id: unidadeId, ativo: true, deve_trocar_senha: true,
     });
     if (e2) {
       await admin.auth.admin.deleteUser(criado.user.id); // não deixa login sem perfil
       return resposta({ erro: 'Não foi possível criar o perfil. Veja os Logs da função.' });
     }
-    await auditar('Acesso criado', criado.user.id, nome, { matricula, papel, unidade_id: unidadeId });
-    return resposta({ ok: true });
+    await auditar('Acesso criado', criado.user.id, nome, { matricula, papel, grupo_cargo: grupo, unidade_id: unidadeId });
+    return resposta({ ok: true, id: criado.user.id });
   }
 
   const alvo = await alvoValido(String(corpo.usuario_id ?? ''));

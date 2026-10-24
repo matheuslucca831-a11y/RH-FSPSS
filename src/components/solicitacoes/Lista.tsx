@@ -46,7 +46,7 @@ export default function ListaSolicitacoes({ itens, mostrarSolicitante, acoes, de
         <CampoBusca valor={busca} onChange={setBusca} className="min-w-56 flex-1"
           placeholder={mostrarSolicitante ? 'Buscar nome, matrícula ou protocolo' : 'Buscar protocolo ou tipo'} />
         <select value={cat} onChange={(e) => setCat(e.target.value as Categoria | '')} aria-label="Tipo de pedido" className={campoCls}>
-          <option value="">Ponto e folgas</option>
+          <option value="">Todos os tipos</option>
           {(Object.keys(CATEGORIAS) as Categoria[]).map((c) => <option key={c} value={c}>{CATEGORIAS[c].titulo}</option>)}
         </select>
         {comUnidade && unidades.length > 1 && (

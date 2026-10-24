@@ -61,7 +61,7 @@ export default function AdminSeguranca() {
           <h3 className="text-base font-semibold text-ink-charcoal">Verificação em duas etapas</h3>
           <Chave rotulo="Obrigatória para a Direção" dica="Recomendado. A Direção vê os pedidos e comprovantes de todas as unidades."
             valor={c.exigir_mfa_direcao} onChange={(v) => setC({ ...c, exigir_mfa_direcao: v })} />
-          <Chave rotulo="Obrigatória para a Chefia" dica="A chefia vê os pedidos e atestados da equipe da unidade."
+          <Chave rotulo="Obrigatória para as chefias" dica="Enfermeiro responsável, Gerente, Supervisor e Coordenação veem pedidos e atestados das equipes."
             valor={c.exigir_mfa_chefia} onChange={(v) => setC({ ...c, exigir_mfa_chefia: v })} />
         </section>
 

@@ -9,28 +9,34 @@ import { problemaSenha } from '@/lib/acesso';
 import {
   criarUsuario, definirAtivo, gerarSenhaTemporaria, liberarNovoCelular, mudarMatricula, redefinirSenha, type NovoUsuario,
 } from '@/lib/adminUsuarios';
-import { PAPEIS, type Papel } from '@/lib/types';
+import { GRUPOS, PAPEIS, SEM_UNIDADE, grupoDoCargo, type GrupoCargo, type Papel } from '@/lib/types';
 import { iniciais } from '@/components/Shell';
 import { Aviso, Botao, Campo, CampoBusca, Selo, campoCls, inputCls } from '@/components/ui';
 import { Paginacao, usePaginacao } from '@/components/Paginacao';
 
 type Usuario = {
-  id: string; nome: string; matricula: string; email: string | null; cargo: string | null; papel: Papel;
-  unidade_id: string | null; ativo: boolean; deve_trocar_senha: boolean; ultimo_acesso_em: string | null;
+  id: string; nome: string; matricula: string; email: string | null; cargo: string | null; papel: Papel; grupo_cargo: GrupoCargo;
+  unidade_id: string | null; supervisiona: string[]; ativo: boolean; deve_trocar_senha: boolean; ultimo_acesso_em: string | null;
   unidade: { nome: string } | null;
 };
 type Unidade = { id: string; nome: string; ativa: boolean };
-type Filtro = 'todos' | Papel | 'ativos' | 'inativos';
+type Filtro = 'todos' | 'funcionario' | 'chefias' | 'gestao' | 'ativos' | 'inativos';
 
-const NOVO: NovoUsuario = { nome: '', matricula: '', senha: '', cargo: '', papel: 'funcionario', unidade_id: null };
-const CARGOS = ['Agente Comunitário de Saúde', 'Auxiliar Administrativo', 'Técnico de Enfermagem', 'Auxiliar de Enfermagem',
-  'Enfermeiro(a)', 'Médico(a)', 'Dentista', 'Supervisor(a)', 'Gerente', 'Gestor(a)'];
-const ORDEM_PAPEL: Papel[] = ['direcao', 'chefia', 'funcionario'];
+const NOVO: NovoUsuario = { nome: '', matricula: '', senha: '', cargo: '', papel: 'funcionario', grupo_cargo: 'geral', unidade_id: null, supervisiona: [] };
+const CARGOS = ['Agente Comunitário de Saúde', 'Auxiliar Administrativo', 'Auxiliar de Serviços Gerais', 'Recepcionista',
+  'Técnico de Enfermagem', 'Auxiliar de Enfermagem', 'Enfermeiro(a)', 'Médico(a)', 'Farmacêutico(a)', 'Técnico de Farmácia',
+  'Supervisor(a)', 'Assessor(a)', 'Gerente de Unidade', 'Coordenador(a) de Enfermagem', 'Gestor(a)'];
+const ORDEM_PAPEL: Papel[] = ['direcao', 'coordenacao', 'supervisor', 'gerente', 'enfermeiro', 'funcionario'];
 const BADGE: Record<Papel, string> = {
   direcao: 'border-electric-cobalt/30 bg-electric-cobalt text-white',
-  chefia: 'border-warning/25 bg-warning-light text-warning',
+  coordenacao: 'border-electric-cobalt/30 bg-deep-cobalt text-white',
+  supervisor: 'border-violet-200 bg-violet-50 text-violet-700',
+  gerente: 'border-warning/25 bg-warning-light text-warning',
+  enfermeiro: 'border-forest/20 bg-forest-light text-forest',
   funcionario: 'border-sky-200/70 bg-sky-50 text-sky-700',
 };
+const CHEFIAS: Papel[] = ['enfermeiro', 'gerente', 'supervisor'];
+const GESTAO: Papel[] = ['coordenacao', 'direcao'];
 
 export default function AdminUsuarios({ meuId }: { meuId: string }) {
   const supabase = useMemo(() => createClient(), []);
@@ -50,11 +56,14 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
   useEffect(() => {
     let vivo = true;
     Promise.all([
-      supabase.from('perfis').select('id, nome, matricula, email, cargo, papel, unidade_id, ativo, deve_trocar_senha, ultimo_acesso_em, unidade:unidades(nome)').order('nome'),
+      supabase.from('perfis').select('id, nome, matricula, email, cargo, papel, grupo_cargo, unidade_id, ativo, deve_trocar_senha, ultimo_acesso_em, unidade:unidades!perfis_unidade_id_fkey(nome)').order('nome'),
       supabase.from('unidades').select('id, nome, ativa').order('nome'),
-    ]).then(([p, u]) => {
+      supabase.from('supervisao').select('supervisor_id, unidade_id'),
+    ]).then(([p, u, sv]) => {
       if (!vivo) return;
+      const vinculos = (sv.data as { supervisor_id: string; unidade_id: string }[]) ?? [];
       const ordenada = ((p.data as unknown as Usuario[]) ?? [])
+        .map((x) => ({ ...x, supervisiona: vinculos.filter((v) => v.supervisor_id === x.id).map((v) => v.unidade_id) }))
         .sort((a, b) => ORDEM_PAPEL.indexOf(a.papel) - ORDEM_PAPEL.indexOf(b.papel) || a.nome.localeCompare(b.nome, 'pt-BR'));
       setLista(ordenada);
       setUnidades((u.data as Unidade[]) ?? []);
@@ -68,16 +77,17 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
   const totais = useMemo(() => {
     const l = lista ?? [];
     return {
-      todos: l.length, direcao: l.filter((u) => u.papel === 'direcao').length, chefia: l.filter((u) => u.papel === 'chefia').length,
-      funcionario: l.filter((u) => u.papel === 'funcionario').length, ativos: l.filter((u) => u.ativo).length, inativos: l.filter((u) => !u.ativo).length,
+      todos: l.length, funcionario: l.filter((u) => u.papel === 'funcionario').length,
+      chefias: l.filter((u) => CHEFIAS.includes(u.papel)).length, gestao: l.filter((u) => GESTAO.includes(u.papel)).length, ativos: l.filter((u) => u.ativo).length, inativos: l.filter((u) => !u.ativo).length,
     } as Record<Filtro, number>;
   }, [lista]);
 
   const visiveis = useMemo(() => {
     const t = normalizar(busca);
     return (lista ?? []).filter((u) =>
-      (filtro === 'todos' || (filtro === 'ativos' ? u.ativo : filtro === 'inativos' ? !u.ativo : u.papel === filtro))
-      && (!fUnidade || u.unidade_id === fUnidade)
+      (filtro === 'todos' || (filtro === 'ativos' ? u.ativo : filtro === 'inativos' ? !u.ativo
+        : filtro === 'chefias' ? CHEFIAS.includes(u.papel) : filtro === 'gestao' ? GESTAO.includes(u.papel) : u.papel === filtro))
+      && (!fUnidade || u.unidade_id === fUnidade || u.supervisiona.includes(fUnidade))
       && (!t || normalizar(`${u.nome} ${u.matricula} ${u.cargo} ${u.unidade?.nome}`).includes(t)));
   }, [lista, busca, filtro, fUnidade]);
   const pag = usePaginacao(visiveis, 25);
@@ -98,9 +108,14 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
     if (!matriculaValida(novo.matricula)) return setErro('Informe a matrícula (só letras, números e ponto).');
     const p = problemaSenha(novo.senha, novo.matricula);
     if (p) return setErro(`Senha inicial: ${p}`);
-    if (novo.papel !== 'direcao' && !novo.unidade_id) return setErro('Escolha a unidade.');
+    if (!SEM_UNIDADE.includes(novo.papel) && !novo.unidade_id) return setErro('Escolha a unidade.');
+    if (novo.papel === 'supervisor' && !novo.supervisiona.length) return setErro('Marque as unidades que o Supervisor acompanha.');
     setOcupado('novo');
     const r = await criarUsuario(novo);
+    if (!r.erro && r.id && novo.papel === 'supervisor') {
+      const { error } = await supabase.from('supervisao').insert(novo.supervisiona.map((u) => ({ supervisor_id: r.id, unidade_id: u })));
+      if (error) { setOcupado(null); return setErro(`Acesso criado, mas as unidades do Supervisor não foram salvas: ${mensagemErro(error)}`); }
+    }
     setOcupado(null);
     if (r.erro) return setErro(r.erro);
     setNovo(null);
@@ -110,7 +125,8 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
   async function salvarEdicao() {
     if (!editando) return;
     const antes = lista?.find((u) => u.id === editando.id);
-    if (editando.papel !== 'direcao' && !editando.unidade_id) return setErro('Escolha a unidade.');
+    if (!SEM_UNIDADE.includes(editando.papel) && !editando.unidade_id) return setErro('Escolha a unidade.');
+    if (editando.papel === 'supervisor' && !editando.supervisiona.length) return setErro('Marque as unidades que o Supervisor acompanha.');
     if (!matriculaValida(editando.matricula)) return setErro('Matrícula inválida.');
     setOcupado(editando.id);
     if (antes && antes.matricula !== editando.matricula.trim()) {
@@ -118,11 +134,18 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
       if (r.erro) { setOcupado(null); return setErro(r.erro); }
     }
     const { error } = await supabase.from('perfis').update({
-      nome: editando.nome.trim(), cargo: editando.cargo?.trim() || null, papel: editando.papel,
-      unidade_id: editando.papel === 'direcao' ? null : editando.unidade_id,
+      nome: editando.nome.trim(), cargo: editando.cargo?.trim() || null, papel: editando.papel, grupo_cargo: editando.grupo_cargo,
+      unidade_id: editando.papel === 'direcao' || editando.papel === 'coordenacao' ? null : editando.unidade_id,
     }).eq('id', editando.id);
+    if (error) { setOcupado(null); return setErro(mensagemErro(error)); }
+    // Unidades acompanhadas pelo Supervisor
+    const novas = editando.papel === 'supervisor' ? editando.supervisiona : [];
+    const tirar = (antes?.supervisiona ?? []).filter((u) => !novas.includes(u));
+    const por = novas.filter((u) => !(antes?.supervisiona ?? []).includes(u));
+    const r1 = tirar.length ? await supabase.from('supervisao').delete().eq('supervisor_id', editando.id).in('unidade_id', tirar) : { error: null };
+    const r2 = por.length ? await supabase.from('supervisao').insert(por.map((u) => ({ supervisor_id: editando.id, unidade_id: u }))) : { error: null };
     setOcupado(null);
-    if (error) return setErro(mensagemErro(error));
+    if (r1.error || r2.error) return setErro(mensagemErro(r1.error ?? r2.error));
     setEditando(null);
     concluir('Usuário atualizado.');
   }
@@ -161,7 +184,7 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
 
   const unidadesAtivas = unidades.filter((u) => u.ativa);
   const FILTROS: [Filtro, string][] = [
-    ['todos', 'Todos'], ['funcionario', 'Funcionários'], ['chefia', 'Chefias'], ['direcao', 'Direção'], ['ativos', 'Ativos'], ['inativos', 'Inativos'],
+    ['todos', 'Todos'], ['funcionario', 'Funcionários'], ['chefias', 'Chefias'], ['gestao', 'Coordenação e Direção'], ['ativos', 'Ativos'], ['inativos', 'Inativos'],
   ];
 
   return (
@@ -226,19 +249,29 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
                 </button>
               </div>
             </Campo>
-            <Campo rotulo="Cargo"><input list="cargos" value={novo.cargo} maxLength={120} onChange={(e) => setNovo({ ...novo, cargo: e.target.value })} className={inputCls} /></Campo>
+            <Campo rotulo="Cargo"><input list="cargos" value={novo.cargo} maxLength={120} className={inputCls}
+              onChange={(e) => setNovo({ ...novo, cargo: e.target.value, grupo_cargo: grupoDoCargo(e.target.value, novo.papel) })} /></Campo>
             <Campo rotulo="Tipo de acesso" dica={PAPEIS[novo.papel].descricao}>
-              <select value={novo.papel} onChange={(e) => setNovo({ ...novo, papel: e.target.value as Papel })} className={inputCls}>
-                {(Object.keys(PAPEIS) as Papel[]).map((p) => <option key={p} value={p}>{PAPEIS[p].rotulo}</option>)}
+              <select value={novo.papel} className={inputCls}
+                onChange={(e) => { const papel = e.target.value as Papel; setNovo({ ...novo, papel, grupo_cargo: grupoDoCargo(novo.cargo, papel) }); }}>
+                {ORDEM_PAPEL.slice().reverse().map((p) => <option key={p} value={p}>{PAPEIS[p].rotulo}</option>)}
               </select>
             </Campo>
-            {novo.papel !== 'direcao' && (
-              <Campo rotulo="Unidade *">
+            <Campo rotulo="Quem assina os pedidos dele(a)" dica={GRUPOS[novo.grupo_cargo].descricao}>
+              <select value={novo.grupo_cargo} onChange={(e) => setNovo({ ...novo, grupo_cargo: e.target.value as GrupoCargo })} className={inputCls}>
+                {(Object.keys(GRUPOS) as GrupoCargo[]).map((g) => <option key={g} value={g}>{GRUPOS[g].rotulo}</option>)}
+              </select>
+            </Campo>
+            {novo.papel !== 'direcao' && novo.papel !== 'coordenacao' && (
+              <Campo rotulo={novo.papel === 'supervisor' ? 'Lotação (opcional)' : 'Unidade *'}>
                 <select value={novo.unidade_id ?? ''} onChange={(e) => setNovo({ ...novo, unidade_id: e.target.value || null })} className={inputCls}>
-                  <option value="">Selecione</option>
+                  <option value="">{novo.papel === 'supervisor' ? 'Sede' : 'Selecione'}</option>
                   {unidadesAtivas.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
                 </select>
               </Campo>
+            )}
+            {novo.papel === 'supervisor' && (
+              <UnidadesSupervisor unidades={unidadesAtivas} marcadas={novo.supervisiona} onChange={(v) => setNovo({ ...novo, supervisiona: v })} />
             )}
           </div>
           <div className="mt-4 flex items-center justify-end gap-2 border-t border-linha pt-3">
@@ -276,14 +309,20 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-gray">
                       <span className="font-mono text-mid-graphite">Matrícula: {u.matricula}</span>
                       {u.cargo && <span>{u.cargo}</span>}
+                      <span title={GRUPOS[u.grupo_cargo]?.descricao}>Assinaturas: {GRUPOS[u.grupo_cargo]?.rotulo ?? 'Cargos gerais'}</span>
                       <span className="inline-flex items-center gap-1"><Clock className="size-3" aria-hidden />
                         {u.ultimo_acesso_em ? `Último acesso: ${dataHoraBR(u.ultimo_acesso_em)}` : 'Nunca entrou'}
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-electric-cobalt/20 bg-powder-blue/25 px-3 py-0.5 text-[11px] font-semibold text-electric-cobalt">
-                        <MapPin className="size-3" aria-hidden /> Lotação: {u.unidade?.nome ?? (u.papel === 'direcao' ? 'Sede' : 'Não vinculada')}
+                        <MapPin className="size-3" aria-hidden /> Lotação: {u.unidade?.nome ?? (SEM_UNIDADE.includes(u.papel) ? 'Sede' : 'Não vinculada')}
                       </span>
+                      {u.papel === 'supervisor' && (
+                        <span className="text-[11px] font-semibold text-violet-700">
+                          Supervisiona: {u.supervisiona.length ? u.supervisiona.map((id) => unidades.find((x) => x.id === id)?.nome).filter(Boolean).join(', ') : 'nenhuma unidade'}
+                        </span>
+                      )}
                       <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-gray">
                         <span className={`size-2 rounded-full ${u.ativo ? 'bg-forest' : 'bg-steel-gray'}`} aria-hidden /> {u.ativo ? 'Ativo' : 'Inativo'}
                       </span>
@@ -291,24 +330,32 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
 
                     {ed && (
                       <div className="mt-3 space-y-3 rounded-xl border border-electric-cobalt/30 bg-powder-blue/15 p-3.5">
-                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
                           <Campo rotulo="Nome"><input value={ed.nome} maxLength={150} onChange={(e) => setEditando({ ...ed, nome: e.target.value })} className={inputCls} /></Campo>
                           <Campo rotulo="Matrícula"><input value={ed.matricula} maxLength={40} onChange={(e) => setEditando({ ...ed, matricula: e.target.value })} className={inputCls} /></Campo>
                           <Campo rotulo="Cargo"><input list="cargos" value={ed.cargo ?? ''} maxLength={120} onChange={(e) => setEditando({ ...ed, cargo: e.target.value })} className={inputCls} /></Campo>
                           <Campo rotulo="Acesso">
                             <select value={ed.papel} disabled={u.id === meuId} onChange={(e) => setEditando({ ...ed, papel: e.target.value as Papel })} className={inputCls}>
-                              {(Object.keys(PAPEIS) as Papel[]).map((p) => <option key={p} value={p}>{PAPEIS[p].rotulo}</option>)}
+                              {ORDEM_PAPEL.slice().reverse().map((p) => <option key={p} value={p}>{PAPEIS[p].rotulo}</option>)}
                             </select>
                           </Campo>
-                          {ed.papel !== 'direcao' && (
-                            <Campo rotulo="Unidade">
+                          <Campo rotulo="Quem assina os pedidos">
+                            <select value={ed.grupo_cargo} onChange={(e) => setEditando({ ...ed, grupo_cargo: e.target.value as GrupoCargo })} className={inputCls}>
+                              {(Object.keys(GRUPOS) as GrupoCargo[]).map((g) => <option key={g} value={g}>{GRUPOS[g].rotulo}</option>)}
+                            </select>
+                          </Campo>
+                          {ed.papel !== 'direcao' && ed.papel !== 'coordenacao' && (
+                            <Campo rotulo={ed.papel === 'supervisor' ? 'Lotação' : 'Unidade'}>
                               <select value={ed.unidade_id ?? ''} onChange={(e) => setEditando({ ...ed, unidade_id: e.target.value || null })} className={inputCls}>
-                                <option value="">Selecione</option>
+                                <option value="">{ed.papel === 'supervisor' ? 'Sede' : 'Selecione'}</option>
                                 {unidadesAtivas.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
                               </select>
                             </Campo>
                           )}
                         </div>
+                        {ed.papel === 'supervisor' && (
+                          <UnidadesSupervisor unidades={unidadesAtivas} marcadas={ed.supervisiona} onChange={(v) => setEditando({ ...ed, supervisiona: v })} />
+                        )}
                         <div className="flex justify-end gap-2">
                           <Botao variante="discreto" onClick={() => setEditando(null)}>Cancelar</Botao>
                           <Botao carregando={ocupado === u.id} onClick={salvarEdicao}>Salvar alterações</Botao>
@@ -360,5 +407,27 @@ function AcaoCartao({ icone: Icone, rotulo, onClick, perigo = false }: { icone: 
         perigo ? 'text-danger hover:bg-danger-light' : 'text-mid-graphite hover:bg-faint-gray hover:text-ink-charcoal'}`}>
       <Icone className="size-3.5" aria-hidden /> {rotulo}
     </button>
+  );
+}
+
+/** Unidades que o Supervisor acompanha (ele assina no lugar das chefias ausentes delas) */
+function UnidadesSupervisor({ unidades, marcadas, onChange }: { unidades: Unidade[]; marcadas: string[]; onChange: (v: string[]) => void }) {
+  return (
+    <fieldset className="col-span-full rounded-xl border border-violet-200 bg-violet-50/50 p-3">
+      <legend className="px-1 text-xs font-semibold text-violet-700">Unidades que acompanha *</legend>
+      <div className="flex flex-wrap gap-2">
+        {unidades.map((x) => {
+          const on = marcadas.includes(x.id);
+          return (
+            <label key={x.id} className={`inline-flex min-h-[36px] cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
+              on ? 'border-violet-400 bg-white text-violet-800' : 'border-linha bg-white text-slate-gray'}`}>
+              <input type="checkbox" checked={on} className="size-3.5 accent-violet-600"
+                onChange={() => onChange(on ? marcadas.filter((m) => m !== x.id) : [...marcadas, x.id])} />
+              {x.nome}
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }

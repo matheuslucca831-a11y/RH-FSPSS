@@ -2,10 +2,11 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowRight, CalendarClock, Fingerprint, PlusCircle } from 'lucide-react';
+import { ArrowRight, CalendarClock, DoorOpen, Fingerprint, PlusCircle, TreePalm } from 'lucide-react';
 import { iniciais } from '@/components/Shell';
 import { createClient } from '@/lib/supabase/client';
 import { useConsulta } from '@/lib/cacheTela';
+import { buscarFila } from '@/lib/fila';
 import { competenciaAtual } from '@/lib/formato';
 import { CATEGORIAS, dataCurta, periodo, rotuloTipo, type Solicitacao } from '@/lib/solicitacoes';
 import { PAPEIS, type Perfil } from '@/lib/types';
@@ -14,8 +15,8 @@ import { Aviso, Selo, TabelaWrap, tdCls, thCls } from '@/components/ui';
 type Painel = {
   ultimos: Solicitacao[];
   minhasAbertas: number;
-  aguardandoChefia: number | null;
-  aguardandoDirecao: number | null;
+  paraAssinar: number | null;
+  substituicao: number | null;
   paradasNaChefia: number | null;
   noMes: number | null;
 };
@@ -24,35 +25,35 @@ export default function Inicio({ perfil }: { perfil: Perfil }) {
   const supabase = useMemo(() => createClient(), []);
   const { dados, erro } = useConsulta<Painel>(`inicio:${perfil.id}`, async () => {
     const conta = () => supabase.from('solicitacoes').select('id', { count: 'exact', head: true });
-    const [ult, abertas, chefia, direcao, parada, mes] = await Promise.all([
+    const assina = perfil.papel !== 'funcionario';
+    const gestao = perfil.papel === 'direcao' || perfil.papel === 'coordenacao';
+    const [ult, abertas, fila, parada, mes] = await Promise.all([
       supabase.from('solicitacoes').select('id, protocolo, categoria, tipo, subtipo, data_inicio, data_fim, situacao, criado_em')
         .eq('solicitante_id', perfil.id).order('criado_em', { ascending: false }).limit(5),
-      conta().eq('solicitante_id', perfil.id).in('situacao', ['Aguardando chefia', 'Aguardando direção']),
-      perfil.papel === 'chefia'
-        ? conta().eq('unidade_id', perfil.unidade_id!).eq('situacao', 'Aguardando chefia').neq('solicitante_id', perfil.id) : null,
-      perfil.papel === 'direcao' ? conta().eq('situacao', 'Aguardando direção').neq('solicitante_id', perfil.id) : null,
-      perfil.papel === 'direcao' ? conta().eq('situacao', 'Aguardando chefia') : null,
-      perfil.papel === 'direcao' ? conta().gte('criado_em', competenciaAtual()) : null,
+      conta().eq('solicitante_id', perfil.id).like('situacao', 'Aguardando%'),
+      assina ? buscarFila(supabase).catch(() => []) : null,
+      gestao ? conta().eq('situacao', 'Aguardando chefia') : null,
+      gestao ? conta().gte('criado_em', competenciaAtual()) : null,
     ]);
     if (ult.error) throw new Error(ult.error.message);
     return {
       ultimos: (ult.data ?? []) as unknown as Solicitacao[],
       minhasAbertas: abertas.count ?? 0,
-      aguardandoChefia: chefia?.count ?? null,
-      aguardandoDirecao: direcao?.count ?? null,
+      paraAssinar: fila ? fila.filter((i) => !i.precisa_motivo).length : null,
+      substituicao: fila ? fila.filter((i) => i.precisa_motivo).length : null,
       paradasNaChefia: parada?.count ?? null,
       noMes: mes?.count ?? null,
     };
   });
 
   const primeiroNome = perfil.nome.split(' ')[0];
-  const local = perfil.papel === 'direcao' ? 'Sede' : perfil.unidade?.nome;
+  const local = perfil.unidade?.nome ?? (perfil.papel === 'funcionario' ? undefined : 'Sede');
 
   const blocos: { rotulo: string; valor: number | null | undefined; href: string; forte?: boolean; texto: string }[] = [
-    ...(perfil.papel === 'chefia' ? [{ rotulo: 'Aguardando a sua análise', valor: dados?.aguardandoChefia, href: '/aprovacoes', forte: true, texto: 'Analisar agora' }] : []),
-    ...(perfil.papel === 'direcao' ? [
-      { rotulo: 'Aguardando a Direção', valor: dados?.aguardandoDirecao, href: '/decisoes', forte: true, texto: 'Decisão final' },
-      { rotulo: 'Ainda na chefia', valor: dados?.paradasNaChefia, href: '/decisoes', texto: 'Em todas as unidades' },
+    ...(perfil.papel !== 'funcionario' ? [{ rotulo: 'Aguardando a sua assinatura', valor: dados?.paraAssinar, href: '/aprovacoes', forte: true, texto: 'Assinar agora' }] : []),
+    ...(dados?.substituicao ? [{ rotulo: 'Para assinar como substituto', valor: dados.substituicao, href: '/aprovacoes', texto: 'Ver pedidos' }] : []),
+    ...(perfil.papel === 'direcao' || perfil.papel === 'coordenacao' ? [
+      { rotulo: 'Ainda nas unidades', valor: dados?.paradasNaChefia, href: '/todas', texto: 'Em todas as unidades' },
       { rotulo: 'Pedidos neste mês', valor: dados?.noMes, href: '/relatorios', texto: 'Ver relatório' },
     ] : []),
     { rotulo: 'Meus pedidos em análise', valor: dados?.minhasAbertas, href: '/minhas', texto: 'Acompanhar' },
@@ -75,9 +76,9 @@ export default function Inicio({ perfil }: { perfil: Perfil }) {
 
       {erro && <Aviso>{erro}</Aviso>}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {(['ponto', 'folga'] as const).map((c) => {
-          const Icone = c === 'ponto' ? Fingerprint : CalendarClock;
+      <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+        {(['ponto', 'folga', 'ferias', 'saida'] as const).map((c) => {
+          const Icone = { ponto: Fingerprint, folga: CalendarClock, ferias: TreePalm, saida: DoorOpen }[c];
           return (
             <Link key={c} href={`/nova?tipo=${c}`}
               className="dock-card group flex items-center gap-4 p-5 transition-all hover:border-electric-cobalt/40">
@@ -85,7 +86,7 @@ export default function Inicio({ perfil }: { perfil: Perfil }) {
                 <Icone className="size-6" aria-hidden />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block font-semibold text-ink-charcoal">Pedir {c === 'ponto' ? 'ajuste de ponto' : 'folga'}</span>
+                <span className="block font-semibold text-ink-charcoal">{{ ponto: 'Ocorrência de ponto', folga: 'Pedir folga', ferias: 'Pedir férias', saida: 'Saída antecipada' }[c]}</span>
                 <span className="block text-sm text-slate-gray">{CATEGORIAS[c].descricao}</span>
               </span>
               <ArrowRight className="size-4 shrink-0 text-slate-gray transition-transform group-hover:translate-x-0.5" aria-hidden />

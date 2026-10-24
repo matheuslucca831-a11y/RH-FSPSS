@@ -1,35 +1,68 @@
 import { dataBR } from './formato';
+import type { GrupoCargo, Papel } from './types';
 
 /** Regras e textos das solicitações. As telas leem daqui; o banco confere as mesmas regras. */
-export type Categoria = 'ponto' | 'folga';
-export type Situacao = 'Aguardando chefia' | 'Aguardando direção' | 'Aprovado' | 'Negado' | 'Cancelado';
+export type Categoria = 'ponto' | 'folga' | 'ferias' | 'cancelamento' | 'saida' | 'estagio' | 'transferencia';
+export type Situacao = 'Aguardando chefia' | 'Aguardando coordenação' | 'Aguardando direção' | 'Aprovado' | 'Negado' | 'Cancelado';
+export type Vaga = 'enfermeiro' | 'gerente';
+export type Fluxo = 'ambos' | 'um' | 'saida_estagio' | 'coordenacao' | 'direcao';
 
 export const CATEGORIAS: Record<Categoria, { titulo: string; descricao: string; tipos: string[] }> = {
   ponto: {
-    titulo: 'Ajuste de ponto',
-    descricao: 'Esquecimento de marcação, atestado ou erro no relógio. Analisado pela chefia da unidade.',
+    titulo: 'Ocorrência de ponto',
+    descricao: 'Esquecimento de marcação, atestado ou erro no relógio.',
     tipos: ['Esquecimento', 'Atestado', 'Erro no relógio', 'Outros'],
   },
   folga: {
     titulo: 'Folga',
-    descricao: 'Banco de horas, folga abonada, serviço eleitoral e outras. Passa pela chefia e pela Direção.',
+    descricao: 'Banco de horas, folga abonada, serviço eleitoral e outras.',
     tipos: ['Banco de horas', 'Folga abonada (Art. 56, XII)', 'Serviço eleitoral (TRE)', 'Campanha de vacinação',
       'Abono natalício (Art. 56, X)', 'Outros'],
+  },
+  ferias: { titulo: 'Férias', descricao: 'Período de férias.', tipos: ['Férias'] },
+  cancelamento: {
+    titulo: 'Cancelamento',
+    descricao: 'Cancelar uma folga ou férias que já foram aprovadas.',
+    tipos: ['Cancelamento de folga', 'Cancelamento de férias'],
+  },
+  saida: { titulo: 'Saída antecipada', descricao: 'Sair antes do fim do expediente.', tipos: ['Saída antecipada'] },
+  estagio: { titulo: 'Estágio', descricao: 'Solicitação de estágio.', tipos: ['Solicitação de estágio'] },
+  transferencia: {
+    titulo: 'Transferência de lotação',
+    descricao: 'Mudar de unidade. Vai direto à Coordenação / Direção.',
+    tipos: ['Transferência de lotação'],
   },
 };
 
 export const SUBTIPOS_ATESTADO = ['Médico', 'Acompanhante', 'Comparecimento', 'Doação de sangue'];
 
-export const SITUACOES: Situacao[] = ['Aguardando chefia', 'Aguardando direção', 'Aprovado', 'Negado', 'Cancelado'];
-export const SITUACOES_ABERTAS: Situacao[] = ['Aguardando chefia', 'Aguardando direção'];
+export const SITUACOES: Situacao[] = ['Aguardando chefia', 'Aguardando coordenação', 'Aguardando direção', 'Aprovado', 'Negado', 'Cancelado'];
+export const SITUACOES_ABERTAS: Situacao[] = ['Aguardando chefia', 'Aguardando coordenação', 'Aguardando direção'];
 export const SITUACOES_FINAIS: Situacao[] = ['Aprovado', 'Negado', 'Cancelado'];
+export const emAnalise = (s: { situacao: Situacao }) => s.situacao.startsWith('Aguardando');
 
-export const anexoObrigatorio = (categoria: Categoria, tipo: string) =>
+export const anexoObrigatorio = (_categoria: Categoria, tipo: string) =>
   tipo === 'Atestado' || tipo === 'Serviço eleitoral (TRE)';
 export const pedeHorarios = (categoria: Categoria, tipo: string) => categoria === 'ponto' && tipo !== 'Atestado';
+/** Tipos com uma data só */
+export const umDia = (categoria: Categoria) => categoria === 'saida' || categoria === 'transferencia';
 
 export const ANEXO_TIPOS = ['application/pdf', 'image/png', 'image/jpeg'];
 export const ANEXO_MAX_MB = 10;
+
+export const MOTIVOS_AUSENCIA = ['Férias', 'Afastamento médico'] as const;
+export type MotivoAusencia = (typeof MOTIVOS_AUSENCIA)[number];
+
+export const ROTULO_VAGA: Record<string, string> = {
+  enfermeiro: 'Enfermeiro responsável', gerente: 'Gerente', coordenacao: 'Coordenação de Enfermagem',
+  direcao: 'Direção', chefia: 'Chefia', supervisor: 'Supervisor',
+};
+
+export type Assinatura = {
+  etapa: 'chefia' | Vaga | 'coordenacao' | 'direcao';
+  decisao: 'Aprovado' | 'Negado';
+  nome: string; papel: string; substituicao: string | null; obs: string | null; criado_em: string;
+};
 
 export type Solicitacao = {
   id: string; protocolo: string; categoria: Categoria; tipo: string; subtipo: string | null; precisa_direcao: boolean;
@@ -37,19 +70,31 @@ export type Solicitacao = {
   entrada: string | null; saida_almoco: string | null; retorno_almoco: string | null; saida: string | null;
   justificativa: string | null; anexo_bucket: 'comprovantes' | 'anexos'; anexo_path: string | null; anexo_nome: string | null;
   solicitante_id: string; solicitante_nome: string; solicitante_matricula: string | null; solicitante_cargo: string | null;
+  grupo_solicitante: GrupoCargo | null;
   unidade_id: string | null; unidade_nome: string | null;
-  situacao: Situacao;
-  chefia_decisao: 'Aprovado' | 'Negado' | null; chefia_nome: string | null; chefia_em: string | null; chefia_obs: string | null;
-  direcao_decisao: 'Aprovado' | 'Negado' | null; direcao_nome: string | null; direcao_em: string | null; direcao_obs: string | null;
+  situacao: Situacao; fluxo: Fluxo | null; pendentes: Vaga[]; gozo_imediato: boolean;
+  referencia_id: string | null; referencia_protocolo: string | null;
+  unidade_destino_id: string | null; unidade_destino_nome: string | null;
   cancelado_em: string | null; arquivado: boolean; arquivado_em: string | null;
   criado_em: string; atualizado_em: string;
+  assinaturas: Assinatura[];
 };
 
 export const CAMPOS_SOLICITACAO =
   'id, protocolo, categoria, tipo, subtipo, precisa_direcao, data_inicio, data_fim, entrada, saida_almoco, retorno_almoco, saida, ' +
   'justificativa, anexo_bucket, anexo_path, anexo_nome, solicitante_id, solicitante_nome, solicitante_matricula, solicitante_cargo, ' +
-  'unidade_id, unidade_nome, situacao, chefia_decisao, chefia_nome, chefia_em, chefia_obs, direcao_decisao, direcao_nome, direcao_em, ' +
-  'direcao_obs, cancelado_em, arquivado, arquivado_em, criado_em, atualizado_em';
+  'grupo_solicitante, unidade_id, unidade_nome, situacao, fluxo, pendentes, gozo_imediato, referencia_id, referencia_protocolo, ' +
+  'unidade_destino_id, unidade_destino_nome, cancelado_em, arquivado, arquivado_em, criado_em, atualizado_em, ' +
+  'assinaturas(etapa, decisao, nome, papel, substituicao, obs, criado_em)';
+
+/** Item da fila de assinaturas (função fila_assinaturas do banco) */
+export type ItemFila = {
+  id: string;
+  como: 'titular' | 'gerente_substituto' | 'supervisor' | 'coordenacao' | 'direcao';
+  vagas: Vaga[];
+  ausentes: Vaga[];
+  precisa_motivo: boolean;
+};
 
 export type ItemHistorico = { id: number; acao: string; detalhe: string | null; usuario_nome: string | null; criado_em: string };
 
@@ -73,63 +118,97 @@ export function periodo(s: Pick<Solicitacao, 'data_inicio' | 'data_fim'>) {
 export const rotuloTipo = (s: Pick<Solicitacao, 'tipo' | 'subtipo'>) => (s.subtipo ? `${s.tipo} (${s.subtipo})` : s.tipo);
 
 const h = (t: string | null) => (t ? t.slice(0, 5) : null);
-/** Horários informados no ajuste de ponto */
-export function horarios(s: Pick<Solicitacao, 'entrada' | 'saida_almoco' | 'retorno_almoco' | 'saida'>) {
+/** Horários informados (ocorrência de ponto ou saída antecipada) */
+export function horarios(s: Pick<Solicitacao, 'categoria' | 'entrada' | 'saida_almoco' | 'retorno_almoco' | 'saida'>) {
+  if (s.categoria === 'saida') return s.saida ? [{ rotulo: 'Sai às', hora: h(s.saida)! }] : [];
   return ([['Entrada', s.entrada], ['Saída almoço', s.saida_almoco], ['Retorno almoço', s.retorno_almoco], ['Saída', s.saida]] as const)
     .filter(([, v]) => v)
     .map(([r, v]) => ({ rotulo: r, hora: h(v)! }));
 }
 
-export type Passo = { titulo: string; data: string | null; estado: 'feito' | 'atual' | 'pendente' | 'negado' | 'cancelado' };
+/**
+ * Caminho que um pedido vai percorrer (o mesmo cálculo do banco, função rota_pedido).
+ * Serve para mostrar as etapas antes de enviar.
+ */
+export function rota(papel: Papel, grupo: GrupoCargo, categoria: Categoria): { fluxo: Fluxo; vagas: Vaga[]; coordenacao: boolean; direcao: boolean } {
+  const direcao = ['folga', 'ferias', 'cancelamento'].includes(categoria);
+  if (categoria === 'transferencia') return { fluxo: 'coordenacao', vagas: [], coordenacao: true, direcao: false };
+  if (['supervisor', 'coordenacao', 'direcao'].includes(papel)) return { fluxo: 'direcao', vagas: [], coordenacao: false, direcao: true };
+  if (papel === 'gerente' || grupo === 'gerente') return { fluxo: 'coordenacao', vagas: [], coordenacao: true, direcao };
+  if (papel === 'enfermeiro' || grupo === 'enfermeiro') return { fluxo: 'ambos', vagas: ['gerente'], coordenacao: false, direcao };
+  if (categoria === 'saida' || categoria === 'estagio') return { fluxo: 'saida_estagio', vagas: ['enfermeiro'], coordenacao: false, direcao };
+  if (grupo === 'farmacia') return { fluxo: 'um', vagas: ['enfermeiro', 'gerente'], coordenacao: false, direcao };
+  return { fluxo: 'ambos', vagas: ['enfermeiro', 'gerente'], coordenacao: false, direcao };
+}
+
+/** Texto curto de cada etapa de assinatura da unidade */
+export function etapasUnidade(fluxo: Fluxo, vagas: Vaga[]): string[] {
+  if (fluxo === 'um') return ['Enfermeiro responsável ou Gerente assina (basta um)'];
+  if (fluxo === 'saida_estagio') return ['Enfermeiro responsável assina (o Gerente só na ausência dele)'];
+  return vagas.map((v) => `${ROTULO_VAGA[v]} assina`);
+}
+
+export type Passo = { titulo: string; detalhe?: string | null; data: string | null; estado: 'feito' | 'atual' | 'pendente' | 'negado' | 'cancelado' };
 
 /** Etapas do pedido, para a linha do tempo dos cartões */
 export function linhaDoTempo(s: Solicitacao): Passo[] {
   const passos: Passo[] = [{ titulo: 'Enviada', data: s.criado_em, estado: 'feito' }];
+  const ass = [...(s.assinaturas ?? [])].sort((a, b) => a.criado_em.localeCompare(b.criado_em));
+  for (const a of ass) {
+    passos.push({
+      titulo: ROTULO_VAGA[a.etapa] ?? a.etapa,
+      detalhe: a.substituicao ? `${a.nome} (${a.substituicao.split(' (')[0]})` : a.nome,
+      data: a.criado_em,
+      estado: a.decisao === 'Negado' ? 'negado' : 'feito',
+    });
+  }
   if (s.situacao === 'Cancelado') {
     passos.push({ titulo: 'Cancelada', data: s.cancelado_em, estado: 'cancelado' });
     return passos;
   }
-  if (s.chefia_decisao || s.situacao === 'Aguardando chefia') {
-    passos.push({
-      titulo: 'Chefia',
-      data: s.chefia_em,
-      estado: s.chefia_decisao === 'Aprovado' ? 'feito' : s.chefia_decisao === 'Negado' ? 'negado' : 'atual',
-    });
+  if (s.situacao === 'Negado') return passos;
+
+  const assinadas = new Set(ass.map((a) => a.etapa));
+  if (s.situacao === 'Aguardando chefia') {
+    if (s.fluxo === 'um') passos.push({ titulo: 'Chefia da unidade', detalhe: 'Enfermeiro ou Gerente', data: null, estado: 'atual' });
+    else for (const v of s.pendentes) passos.push({ titulo: ROTULO_VAGA[v], data: null, estado: 'atual' });
   }
-  if (s.chefia_decisao !== 'Negado' && (s.precisa_direcao || s.direcao_decisao || s.situacao === 'Aguardando direção')) {
-    passos.push({
-      titulo: 'Direção',
-      data: s.direcao_em,
-      estado: s.direcao_decisao === 'Aprovado' ? 'feito' : s.direcao_decisao === 'Negado' ? 'negado'
-        : s.situacao === 'Aguardando direção' ? 'atual' : 'pendente',
-    });
+  if (s.situacao === 'Aguardando coordenação') passos.push({ titulo: ROTULO_VAGA.coordenacao, data: null, estado: 'atual' });
+  if (s.situacao === 'Aguardando direção') passos.push({ titulo: 'Direção', data: null, estado: 'atual' });
+  else if (s.situacao !== 'Aprovado' && s.precisa_direcao && !assinadas.has('direcao')) {
+    passos.push({ titulo: 'Direção', data: null, estado: 'pendente' });
   }
-  if (s.situacao !== 'Negado') {
-    passos.push({ titulo: 'Concluída', data: s.situacao === 'Aprovado' ? s.direcao_em ?? s.chefia_em : null, estado: s.situacao === 'Aprovado' ? 'feito' : 'pendente' });
-  }
+  passos.push({
+    titulo: 'Concluída',
+    data: s.situacao === 'Aprovado' ? ass.at(-1)?.criado_em ?? null : null,
+    estado: s.situacao === 'Aprovado' ? 'feito' : 'pendente',
+  });
   return passos;
 }
 
 /** Frase simples sobre a situação do pedido */
 export function frase(s: Solicitacao) {
-  const motivo = (t: string | null) => (t ? ` Motivo: ${t}` : '');
+  const ass = [...(s.assinaturas ?? [])].sort((a, b) => a.criado_em.localeCompare(b.criado_em));
+  const ultima = ass.at(-1);
+  const quem = (a?: Assinatura) => (a ? `${ROTULO_VAGA[a.etapa] ?? a.etapa}: ${a.nome}` : '');
   switch (s.situacao) {
-    case 'Aguardando chefia':
-      return `Enviada em ${dataCurta(s.criado_em)}. Aguardando a análise da chefia da unidade.`;
+    case 'Aguardando chefia': {
+      const falta = s.fluxo === 'um' ? 'a assinatura do Enfermeiro responsável ou do Gerente'
+        : s.pendentes.map((v) => ROTULO_VAGA[v]).join(' e ');
+      return `${ass.length ? `Assinada por ${ass.map((a) => a.nome).join(', ')}. ` : `Enviada em ${dataCurta(s.criado_em)}. `}Aguardando ${s.fluxo === 'um' ? falta : `a assinatura de ${falta}`}.`;
+    }
+    case 'Aguardando coordenação':
+      return `Enviada em ${dataCurta(s.criado_em)}. Aguardando a avaliação da Coordenação de Enfermagem${s.categoria === 'transferencia' ? ' / Direção' : ''}.`;
     case 'Aguardando direção':
-      return s.chefia_decisao === 'Aprovado'
-        ? `Aprovada pela chefia (${s.chefia_nome}) em ${dataCurta(s.chefia_em)}. Aguardando a decisão da Direção.`
+      return ass.length
+        ? `Assinada por ${ass.map((a) => a.nome).join(', ')}. Aguardando a decisão final da Direção.`
         : `Enviada direto à Direção em ${dataCurta(s.criado_em)}. Aguardando a decisão.`;
     case 'Aprovado':
-      return s.direcao_decisao
-        ? `Aprovada pela Direção (${s.direcao_nome}) em ${dataCurta(s.direcao_em)}.${s.direcao_obs ? ` Observação: ${s.direcao_obs}` : ''}`
-        : `Aprovada pela chefia (${s.chefia_nome}) em ${dataCurta(s.chefia_em)}.${s.chefia_obs ? ` Observação: ${s.chefia_obs}` : ''}`;
+      return `Aprovada (${quem(ultima)}) em ${dataCurta(ultima?.criado_em ?? s.atualizado_em)}.${ultima?.obs ? ` Observação: ${ultima.obs}` : ''}`;
     case 'Negado':
-      return s.direcao_decisao === 'Negado'
-        ? `Negada pela Direção (${s.direcao_nome}) em ${dataCurta(s.direcao_em)}.${motivo(s.direcao_obs)}`
-        : `Negada pela chefia (${s.chefia_nome}) em ${dataCurta(s.chefia_em)}.${motivo(s.chefia_obs)}`;
+      return `Negada (${quem(ultima)}) em ${dataCurta(ultima?.criado_em ?? s.atualizado_em)}.${ultima?.obs ? ` Motivo: ${ultima.obs}` : ''}`;
     case 'Cancelado':
-      return `Cancelada por quem pediu em ${dataCurta(s.cancelado_em)}.`;
+      return `Cancelada em ${dataCurta(s.cancelado_em)}.`;
   }
 }
 

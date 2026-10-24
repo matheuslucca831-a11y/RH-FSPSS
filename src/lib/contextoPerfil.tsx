@@ -78,7 +78,7 @@ export function ProvedorPerfil({ children }: { children: React.ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
         const { data, error } = await supabase
           .from('perfis')
-          .select('id, nome, matricula, email, cargo, papel, unidade_id, ativo, unidade:unidades(nome, sigla)')
+          .select('id, nome, matricula, email, cargo, papel, unidade_id, ativo, unidade:unidades!perfis_unidade_id_fkey(nome, sigla)')
           .eq('id', session!.user.id)
           .maybeSingle();
         if (error || !data) {

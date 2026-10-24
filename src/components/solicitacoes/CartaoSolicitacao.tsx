@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Ban, Check, ChevronDown, Clock, ExternalLink, Paperclip, X } from 'lucide-react';
+import { ArrowLeftRight, Ban, Check, ChevronDown, Clock, ExternalLink, Paperclip, Undo2, X, Zap } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { abrirComprovante } from '@/lib/funcoes';
 import { dataHoraBR } from '@/lib/formato';
@@ -65,6 +65,26 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
         </ul>
       )}
 
+      {(s.unidade_destino_nome || s.referencia_protocolo || s.gozo_imediato) && (
+        <ul className="mt-3 flex flex-wrap gap-2 text-xs">
+          {s.unidade_destino_nome && (
+            <li className="inline-flex items-center gap-1.5 rounded-full border border-electric-cobalt/20 bg-powder-blue/25 px-2.5 py-1 font-semibold text-electric-cobalt">
+              <ArrowLeftRight className="size-3.5" aria-hidden /> Para: {s.unidade_destino_nome}
+            </li>
+          )}
+          {s.referencia_protocolo && (
+            <li className="inline-flex items-center gap-1.5 rounded-full border border-linha bg-faint-gray px-2.5 py-1">
+              <Undo2 className="size-3.5 text-tinta-suave" aria-hidden /> Cancela o protocolo <span className="font-mono font-semibold">{s.referencia_protocolo}</span>
+            </li>
+          )}
+          {s.gozo_imediato && (
+            <li className="inline-flex items-center gap-1.5 rounded-full border border-warning/25 bg-warning-light px-2.5 py-1 font-semibold text-warning">
+              <Zap className="size-3.5" aria-hidden /> Gozo imediato
+            </li>
+          )}
+        </ul>
+      )}
+
       {s.justificativa && (
         <p className="mt-3 whitespace-pre-line border-l-2 border-linha pl-3 text-sm text-tinta">{s.justificativa}</p>
       )}
@@ -91,12 +111,21 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
               <span className={`mt-1 text-[11px] leading-tight ${daVez || travou ? 'font-bold' : 'text-tinta-suave'}`}>
                 {p.estado === 'negado' ? `${p.titulo}: negou` : p.titulo}
               </span>
+              {p.detalhe && <span className="max-w-full truncate px-1 text-[10px] text-tinta-suave" title={p.detalhe}>{p.detalhe}</span>}
               {p.data && (feito || travou) && <span className="text-[10px] text-tinta-suave">{dataCurta(p.data)}</span>}
               {daVez && <span className="text-[10px] text-acento-escuro">aguardando</span>}
             </li>
           );
         })}
       </ol>
+
+      {s.assinaturas?.some((a) => a.substituicao) && (
+        <ul className="mt-3 space-y-1 text-xs text-tinta-suave">
+          {s.assinaturas.filter((a) => a.substituicao).map((a) => (
+            <li key={a.criado_em}><strong className="text-mid-graphite">{a.nome}:</strong> {a.substituicao}</li>
+          ))}
+        </ul>
+      )}
 
       <p className={`mt-4 rounded-xl border px-4 py-2.5 text-sm ${parou ? (s.situacao === 'Negado' ? 'border-danger/20 bg-danger-light text-danger' : 'border-linha bg-faint-gray text-slate-gray') : fim ? 'border-forest/20 bg-forest-light text-forest' : 'border-linha bg-faint-gray text-mid-graphite'}`}>
         {frase(s)}

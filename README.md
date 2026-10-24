@@ -53,6 +53,8 @@ Supabase > **Project Settings > API Keys**: gere chaves novas e desative as anti
 | `supabase/003_importar_sistema_antigo.sql` | *(Opcional)* Traz unidades, usuários (que já têm login) e ocorrências do sistema antigo. Todos vão precisar criar senha nova no primeiro acesso. |
 | `supabase/002_primeiro_acesso.sql` | Cria o primeiro acesso de Direção (instruções no arquivo). |
 | `supabase/004_verificar_seguranca.sql` | Confere a instalação. Qualquer linha "PROBLEMA" precisa de atenção. |
+| `supabase/005_correcao_acesso.sql` | Correção do acesso (perfil na checagem de segurança). |
+| `supabase/006_fluxo_circular_254.sql` | **Fluxo de assinaturas da Circular nº 254/2026** (papéis, ausências, assinaturas). Rodar depois do 005. |
 
 ### 2. Configurações do Supabase (painel)
 
@@ -127,3 +129,20 @@ scripts/pacote-hostgator.mjs  Gera o .zip para a HostGator
 hospedagem/.htaccess          HTTPS, cabeçalhos de segurança, URLs limpas
 supabase/                     Scripts SQL e Edge Functions
 ```
+
+
+## Fluxo de assinaturas (Circular nº 254/2026)
+
+| Quem pede | O que pede | Quem assina | Na ausência (férias ou afastamento médico) |
+|---|---|---|---|
+| Cargos gerais | Férias, folgas, ocorrências de ponto, cancelamentos | Enfermeiro responsável + Gerente | Supervisor assina no lugar |
+| Farmacêutico e Técnico de Farmácia | Qualquer | Enfermeiro **ou** Gerente (basta um) | Supervisor, se os dois estiverem ausentes |
+| Enfermeiro | Qualquer | Gerente | Supervisor |
+| Gerente | Qualquer | Coordenação de Enfermagem | |
+| Qualquer um | Saída antecipada e estágio | Enfermeiro (Gerente só na ausência dele) | Com os dois ausentes, aguarda o retorno |
+| Qualquer um | Transferência de lotação | Coordenação / Direção | |
+
+- Folgas, férias e cancelamentos seguem depois para a **decisão final da Direção**.
+- **Folga para gozo imediato**: com Enfermeiro ou Gerente ausente, o outro assina sozinho, registrando que a outra chefia está ciente.
+- **Ausências**: registradas em "Ausências das chefias" liberam o substituto na hora. Sem registro, o substituto assina declarando o motivo (fica no histórico). Férias de chefia aprovadas no sistema viram ausência automaticamente.
+- Em Administração > Usuários, defina para cada pessoa o **Acesso** (Funcionário, Enfermeiro responsável, Gerente, Supervisor, Coordenação, Direção), **Quem assina os pedidos** (Cargos gerais, Farmácia, Enfermeiro, Gerente) e, para Supervisor, as **unidades que acompanha**.

@@ -59,6 +59,7 @@ const TONS: Record<Tom, { caixa: string; ponto: string }> = {
 const SELOS: Record<string, Tom> = {
   'Aguardando chefia': 'atencao',
   'Aguardando direção': 'info',
+  'Aguardando coordenação': 'info',
   Aprovado: 'sucesso',
   Negado: 'perigo',
   Cancelado: 'neutro',

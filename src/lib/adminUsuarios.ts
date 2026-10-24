@@ -1,17 +1,19 @@
 import { chamarFuncao } from '@/lib/funcoes';
 import { emailDaMatricula } from '@/lib/login';
-import type { Papel } from '@/lib/types';
+import type { GrupoCargo, Papel } from '@/lib/types';
 
 /** Ações de usuário pela Edge Function "rh-usuarios" (a chave secreta fica só no Supabase) */
 export type NovoUsuario = {
-  nome: string; matricula: string; senha: string; cargo: string; papel: Papel; unidade_id: string | null;
+  nome: string; matricula: string; senha: string; cargo: string; papel: Papel; grupo_cargo: GrupoCargo; unidade_id: string | null;
+  /** Só para Supervisor: unidades que acompanha (gravadas depois de criar o acesso) */
+  supervisiona: string[];
 };
 
 const FUNCAO = 'rh-usuarios';
 const chamar = (corpo: Record<string, unknown>) => chamarFuncao(FUNCAO, corpo);
 
-export const criarUsuario = (d: NovoUsuario) =>
-  chamar({ acao: 'criar', ...d, matricula: d.matricula.trim(), email: emailDaMatricula(d.matricula) });
+export const criarUsuario = ({ supervisiona: _s, ...d }: NovoUsuario) =>
+  chamarFuncao<{ id?: string }>(FUNCAO, { acao: 'criar', ...d, matricula: d.matricula.trim(), email: emailDaMatricula(d.matricula) });
 export const redefinirSenha = (usuarioId: string, senha: string) => chamar({ acao: 'senha', usuario_id: usuarioId, senha });
 export const mudarMatricula = (usuarioId: string, matricula: string) =>
   chamar({ acao: 'matricula', usuario_id: usuarioId, matricula: matricula.trim(), email: emailDaMatricula(matricula) });

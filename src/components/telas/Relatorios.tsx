@@ -28,6 +28,12 @@ function somar(c: Contagem, s: Solicitacao, dias: number) {
   else c.analise++;
 }
 
+const porCategoria = () => Object.fromEntries((Object.keys(CATEGORIAS) as Categoria[]).map((c) => [c, vazia()])) as Record<Categoria, Contagem>;
+const soma = (k: Record<Categoria, Contagem>, campo: keyof Contagem, cats = Object.keys(CATEGORIAS) as Categoria[]) =>
+  cats.reduce((t, c) => t + (k[c][campo] as number), 0);
+const OUTROS: Categoria[] = ['saida', 'estagio', 'cancelamento', 'transferencia'];
+const TITULO_CARTAO: Partial<Record<Categoria, string>> = { folga: 'Folgas', ferias: 'Férias', ponto: 'Ocorrências de ponto', saida: 'Saídas antecipadas' };
+
 export default function Relatorios() {
   const supabase = useMemo(() => createClient(), []);
   const [mes, setMes] = useState(competenciaAtual());
@@ -38,7 +44,7 @@ export default function Relatorios() {
     buscarSolicitacoes(supabase, (q) => q.lte('data_inicio', fim).gte('data_fim', mes), true), [mes]);
 
   const r = useMemo(() => {
-    const porCat: Record<Categoria, Contagem> = { ponto: vazia(), folga: vazia() };
+    const porCat = porCategoria();
     const porUnidade = new Map<string, Record<Categoria, Contagem>>();
     const porTipo = new Map<string, Contagem & { categoria: Categoria }>();
     const porPessoa = new Map<string, { nome: string; matricula: string | null; unidade: string | null; pedidos: number; dias: number }>();
@@ -48,7 +54,7 @@ export default function Relatorios() {
       somar(porCat[s.categoria], s, d);
 
       const u = s.unidade_nome ?? 'Sede';
-      if (!porUnidade.has(u)) porUnidade.set(u, { ponto: vazia(), folga: vazia() });
+      if (!porUnidade.has(u)) porUnidade.set(u, porCategoria());
       somar(porUnidade.get(u)![s.categoria], s, d);
 
       const t = `${s.categoria}|${rotuloTipo(s)}`;
@@ -91,12 +97,12 @@ export default function Relatorios() {
       {erro && <div className="mt-4"><Aviso>{erro}</Aviso></div>}
 
       <div className={`transition-opacity ${atualizando || !dados ? 'opacity-60' : ''}`}>
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {(['folga', 'ponto'] as Categoria[]).map((c) => {
+        <div className="mt-6 grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+          {(['folga', 'ferias', 'ponto', 'saida'] as Categoria[]).map((c) => {
             const k = r.porCat[c];
             return (
               <section key={c} className="dock-card p-5 sm:p-6">
-                <h2 className="text-sm font-bold">{CATEGORIAS[c].titulo === 'Folga' ? 'Folgas' : 'Ajustes de ponto'}</h2>
+                <h2 className="text-sm font-bold">{TITULO_CARTAO[c]}</h2>
                 <dl className="mt-3 grid grid-cols-4 gap-3">
                   <Numero rotulo="Pedidos" valor={k.total} grande />
                   <Numero rotulo="Aprovados" valor={k.aprovadas} />
@@ -104,7 +110,9 @@ export default function Relatorios() {
                   <Numero rotulo="Em análise" valor={k.analise} />
                 </dl>
                 <p className="mt-3 text-xs text-tinta-suave">
-                  {c === 'folga' ? `${k.dias} ${k.dias === 1 ? 'dia' : 'dias'} de folga aprovados no mês` : `${k.dias} ${k.dias === 1 ? 'dia' : 'dias'} com ajuste aprovado`}
+                  {c === 'folga' ? `${k.dias} ${k.dias === 1 ? 'dia' : 'dias'} de folga aprovados no mês`
+                    : c === 'ferias' ? `${k.dias} ${k.dias === 1 ? 'dia' : 'dias'} de férias aprovados no mês`
+                    : `${k.dias} ${k.dias === 1 ? 'dia' : 'dias'} com pedido aprovado`}
                   {k.canceladas > 0 && ` | ${k.canceladas} cancelado${k.canceladas > 1 ? 's' : ''}`}
                 </p>
               </section>
@@ -120,22 +128,25 @@ export default function Relatorios() {
                 <tr>
                   <th className={thCls}>Unidade</th>
                   <th className={`${thCls} text-right`}>Folgas</th><th className={`${thCls} text-right`}>Dias de folga</th>
-                  <th className={`${thCls} text-right`}>Ajustes de ponto</th>
+                  <th className={`${thCls} text-right`}>Férias</th><th className={`${thCls} text-right`}>Ocorrências de ponto</th>
+                  <th className={`${thCls} text-right`}>Outros</th>
                   <th className={`${thCls} text-right`}>Aprovados</th><th className={`${thCls} text-right`}>Negados</th>
                   <th className={`${thCls} text-right`}>Em análise</th>
                 </tr>
               </thead>
               <tbody>
-                {r.unidades.length === 0 && <tr><td colSpan={7} className={`${tdCls} text-tinta-suave`}>{dados ? 'Nenhum pedido neste mês.' : 'Carregando…'}</td></tr>}
+                {r.unidades.length === 0 && <tr><td colSpan={9} className={`${tdCls} text-tinta-suave`}>{dados ? 'Nenhum pedido neste mês.' : 'Carregando…'}</td></tr>}
                 {r.unidades.map(([u, k]) => (
                   <tr key={u} className="hover:bg-papel/50">
                     <td className={`${tdCls} font-medium`}>{u}</td>
                     <td className={`${tdCls} text-right tabular-nums`}>{k.folga.total}</td>
                     <td className={`${tdCls} text-right tabular-nums`}>{k.folga.dias}</td>
+                    <td className={`${tdCls} text-right tabular-nums`}>{k.ferias.total}</td>
                     <td className={`${tdCls} text-right tabular-nums`}>{k.ponto.total}</td>
-                    <td className={`${tdCls} text-right tabular-nums`}>{k.folga.aprovadas + k.ponto.aprovadas}</td>
-                    <td className={`${tdCls} text-right tabular-nums`}>{k.folga.negadas + k.ponto.negadas}</td>
-                    <td className={`${tdCls} text-right tabular-nums`}>{k.folga.analise + k.ponto.analise}</td>
+                    <td className={`${tdCls} text-right tabular-nums`} title="Saída antecipada, estágio, cancelamento e transferência">{soma(k, 'total', OUTROS)}</td>
+                    <td className={`${tdCls} text-right tabular-nums`}>{soma(k, 'aprovadas')}</td>
+                    <td className={`${tdCls} text-right tabular-nums`}>{soma(k, 'negadas')}</td>
+                    <td className={`${tdCls} text-right tabular-nums`}>{soma(k, 'analise')}</td>
                   </tr>
                 ))}
               </tbody>

@@ -1,5 +1,6 @@
 'use client';
 
+import { PAPEIS } from '@/lib/types';
 import { useMemo, useState } from 'react';
 import { Download, FileSearch } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -17,7 +18,7 @@ type Registro = {
 
 const ROTULO_CAMPO: Record<string, string> = {
   nome: 'nome', matricula: 'matrícula', cargo: 'cargo', papel: 'acesso', unidade_id: 'unidade', ativo: 'ativo', sigla: 'sigla', ativa: 'ativa',
-  exigir_mfa_direcao: 'duas etapas da Direção', exigir_mfa_chefia: 'duas etapas da Chefia', minutos_inatividade: 'minutos sem uso',
+  exigir_mfa_direcao: 'duas etapas da Direção', exigir_mfa_chefia: 'duas etapas das chefias', minutos_inatividade: 'minutos sem uso',
   limite_pedidos_dia: 'limite por dia', solicitante: 'de', apps_removidos: 'apps removidos', tinha_anexo: 'tinha comprovante', tipo: 'tipo', periodo: 'período', situacao: 'situação',
 };
 
@@ -34,7 +35,7 @@ function resumo(d: Record<string, unknown> | null) {
     return `${nome}: ${fmt(v)}`;
   }).join(' | ');
 }
-const PAPEL: Record<string, string> = { funcionario: 'Funcionário', chefia: 'Chefia da unidade', direcao: 'Direção' };
+const PAPEL: Record<string, string> = { chefia: 'Chefia (antigo)', ...Object.fromEntries(Object.entries(PAPEIS).map(([k, v]) => [k, v.rotulo])) };
 let NOMES_UNIDADES: Record<string, string> = {};
 const fmt = (v: unknown) => {
   if (v === null || v === undefined || v === '') return 'vazio';

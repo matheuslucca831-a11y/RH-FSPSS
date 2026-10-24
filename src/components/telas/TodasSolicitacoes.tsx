@@ -9,14 +9,16 @@ import { buscarSolicitacoes } from '@/lib/consultas';
 import { normalizar } from '@/lib/formato';
 import { baixarCSV } from '@/lib/csv';
 import {
-  CATEGORIAS, SITUACOES, dataCurta, periodo, rotuloTipo, type Categoria, type Situacao, type Solicitacao,
+  CATEGORIAS, ROTULO_VAGA, SITUACOES, dataCurta, periodo, rotuloTipo, type Categoria, type ItemFila, type Situacao, type Solicitacao,
 } from '@/lib/solicitacoes';
 import { Aviso, Botao, Cabecalho, CampoBusca, Campo, Selo, TabelaWrap, inputCls, tdCls, thCls } from '@/components/ui';
 import { Paginacao, usePaginacao } from '@/components/Paginacao';
 import CartaoSolicitacao from '@/components/solicitacoes/CartaoSolicitacao';
-import { AcaoArquivar, AcaoExcluir, AcoesDecisao } from '@/components/solicitacoes/Acoes';
+import { AcaoArquivar, AcaoExcluir, AcoesAssinatura } from '@/components/solicitacoes/Acoes';
+import { buscarFila } from '@/lib/fila';
+import { usePerfil } from '@/lib/contextoPerfil';
 
-/** Direção: tabela de todas as solicitações (ou do arquivo) com filtros */
+/** Direção e Coordenação: tabela de todas as solicitações (ou do arquivo) com filtros */
 export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usuarioId: string; arquivo?: boolean }) {
   const supabase = useMemo(() => createClient(), []);
   const [ok, setOk] = useState<string | null>(null);
@@ -29,8 +31,12 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
   const [de, setDe] = useState('');
   const [ate, setAte] = useState('');
 
+  const { perfil } = usePerfil();
+  const direcao = perfil.papel === 'direcao';
   const { dados, erro, atualizando, recarregar } = useConsulta(arquivo ? 'arquivo' : 'todas', () =>
     buscarSolicitacoes(supabase, (q) => q.eq('arquivado', arquivo)));
+  const { dados: fila, recarregar: recarregarFila } = useConsulta(`fila:${usuarioId}`, () => (arquivo ? Promise.resolve([]) : buscarFila(supabase)));
+  const filaPor = useMemo(() => new Map((fila ?? []).map((i) => [i.id, i])), [fila]);
 
   const unidades = useMemo(
     () => [...new Set((dados ?? []).map((s) => s.unidade_nome ?? 'Sem unidade'))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
@@ -54,15 +60,17 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
     setOk(m);
     setAberta(null);
     recarregar();
+    recarregarFila();
   }
 
   function exportar() {
     baixarCSV(`${arquivo ? 'arquivo' : 'solicitacoes'}-rh.csv`,
       ['Protocolo', 'Funcionário', 'Matrícula', 'Cargo', 'Unidade', 'Pedido', 'Tipo', 'Início', 'Fim', 'Situação',
-        'Chefia', 'Decisão chefia', 'Direção', 'Decisão Direção', 'Enviado em'],
+        'Assinaturas', 'Enviado em'],
       visiveis.map((s) => [s.protocolo, s.solicitante_nome, s.solicitante_matricula, s.solicitante_cargo, s.unidade_nome,
         CATEGORIAS[s.categoria].titulo, rotuloTipo(s), s.data_inicio, s.data_fim, s.situacao,
-        s.chefia_nome, s.chefia_decisao, s.direcao_nome, s.direcao_decisao, dataCurta(s.criado_em)]));
+        (s.assinaturas ?? []).map((a) => `${ROTULO_VAGA[a.etapa] ?? a.etapa}: ${a.nome} (${a.decisao}${a.substituicao ? `; ${a.substituicao}` : ''})`).join(' | '),
+        dataCurta(s.criado_em)]));
   }
 
   return (
@@ -122,9 +130,9 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
         {pag.visiveis.map((s) => (
           <CartaoSolicitacao key={s.id} s={s} mostrarSolicitante acoes={
             <>
-              {s.solicitante_id !== usuarioId && (s.situacao === 'Aguardando chefia' || s.situacao === 'Aguardando direção') && <AcoesDecisao s={s} quem="direcao" onFeito={feito} />}
-              <AcaoArquivar s={s} onFeito={feito} />
-              <AcaoExcluir s={s} onFeito={feito} />
+              {filaPor.get(s.id) && <AcoesAssinatura s={s} item={filaPor.get(s.id)!} onFeito={feito} />}
+              {direcao && <AcaoArquivar s={s} onFeito={feito} />}
+              {direcao && <AcaoExcluir s={s} onFeito={feito} />}
             </>
           } />
         ))}
@@ -147,7 +155,7 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
                 </td></tr>
               )}
               {pag.visiveis.map((s) => (
-                <Linha key={s.id} s={s} aberta={aberta === s.id} usuarioId={usuarioId}
+                <Linha key={s.id} s={s} aberta={aberta === s.id} item={filaPor.get(s.id)} direcao={direcao}
                   onAbrir={() => setAberta(aberta === s.id ? null : s.id)} onFeito={feito} />
               ))}
             </tbody>
@@ -159,10 +167,9 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
   );
 }
 
-function Linha({ s, aberta, usuarioId, onAbrir, onFeito }: {
-  s: Solicitacao; aberta: boolean; usuarioId: string; onAbrir: () => void; onFeito: (m: string) => void;
+function Linha({ s, aberta, item, direcao, onAbrir, onFeito }: {
+  s: Solicitacao; aberta: boolean; item?: ItemFila; direcao: boolean; onAbrir: () => void; onFeito: (m: string) => void;
 }) {
-  const podeDecidir = s.solicitante_id !== usuarioId && (s.situacao === 'Aguardando chefia' || s.situacao === 'Aguardando direção');
   return (
     <Fragment>
       <tr onClick={onAbrir} className={`cursor-pointer ${aberta ? 'bg-acento-claro/40' : 'hover:bg-papel/50'}`}>
@@ -190,9 +197,9 @@ function Linha({ s, aberta, usuarioId, onAbrir, onFeito }: {
           <td colSpan={8} className="border-b border-linha bg-papel/60 p-3">
             <CartaoSolicitacao s={s} mostrarSolicitante acoes={
               <>
-                {podeDecidir && <AcoesDecisao s={s} quem="direcao" onFeito={onFeito} />}
-                <AcaoArquivar s={s} onFeito={onFeito} />
-                <AcaoExcluir s={s} onFeito={onFeito} />
+                {item && <AcoesAssinatura s={s} item={item} onFeito={onFeito} />}
+                {direcao && <AcaoArquivar s={s} onFeito={onFeito} />}
+                {direcao && <AcaoExcluir s={s} onFeito={onFeito} />}
               </>
             } />
           </td>

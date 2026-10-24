@@ -78,7 +78,7 @@ export default function AdminUnidades() {
           <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-electric-cobalt text-white shadow-xs"><Building2 className="size-6" aria-hidden /></div>
           <div>
             <h2 className="text-lg font-bold tracking-tight text-ink-charcoal">Unidades</h2>
-            <p className="mt-0.5 text-xs text-slate-gray">Cada funcionário e chefia pertence a uma unidade. A chefia analisa os pedidos de quem é da mesma unidade.</p>
+            <p className="mt-0.5 text-xs text-slate-gray">Cada funcionário pertence a uma unidade. O Enfermeiro responsável e o Gerente assinam os pedidos da própria unidade.</p>
           </div>
         </div>
         <Botao onClick={() => { setNova({ nome: '', sigla: '' }); setOk(null); }}><Plus className="size-4" aria-hidden /> Nova unidade</Botao>
@@ -107,16 +107,17 @@ export default function AdminUnidades() {
             <thead>
               <tr>
                 <th className={thCls}>Unidade</th><th className={thCls}>Sigla</th>
-                <th className={`${thCls} text-right`}>Chefias</th><th className={`${thCls} text-right`}>Funcionários</th>
+                <th className={`${thCls} text-right`}>Enfermeiro resp.</th><th className={`${thCls} text-right`}>Gerente</th><th className={`${thCls} text-right`}>Funcionários</th>
                 <th className={thCls}>Situação</th><th className={thCls}><span className="sr-only">Ações</span></th>
               </tr>
             </thead>
             <tbody>
-              {!lista && <tr><td colSpan={6} className={`${tdCls} text-tinta-suave`}>Carregando…</td></tr>}
-              {lista?.length === 0 && <tr><td colSpan={6} className={`${tdCls} text-tinta-suave`}>Nenhuma unidade cadastrada.</td></tr>}
+              {!lista && <tr><td colSpan={7} className={`${tdCls} text-tinta-suave`}>Carregando…</td></tr>}
+              {lista?.length === 0 && <tr><td colSpan={7} className={`${tdCls} text-tinta-suave`}>Nenhuma unidade cadastrada.</td></tr>}
               {lista?.map((u) => {
                 const ed = editando?.id === u.id ? editando : null;
-                const chefias = conta(u.id, 'chefia');
+                const enf = conta(u.id, 'enfermeiro');
+                const ger = conta(u.id, 'gerente');
                 return (
                   <tr key={u.id} className="hover:bg-faint-gray">
                     <td className={`${tdCls} font-medium`}>
@@ -126,9 +127,10 @@ export default function AdminUnidades() {
                       {ed ? <input value={ed.sigla ?? ''} maxLength={20} onChange={(e) => setEditando({ ...ed, sigla: e.target.value })} aria-label="Sigla" className={`${campoCls} w-24`} /> : u.sigla ?? ''}
                     </td>
                     <td className={`${tdCls} text-right tabular-nums`}>
-                      {chefias}{u.ativa && chefias === 0 && conta(u.id) > 0 && (
-                        <span className="ml-2 rounded-full border border-warning/20 bg-warning-light px-2 py-0.5 text-[11px] font-semibold text-warning" title="Os pedidos desta unidade só podem ser decididos pela Direção">sem chefia</span>
-                      )}
+                      {enf}{u.ativa && enf === 0 && conta(u.id) > 0 && <SemChefia />}
+                    </td>
+                    <td className={`${tdCls} text-right tabular-nums`}>
+                      {ger}{u.ativa && ger === 0 && conta(u.id) > 0 && <SemChefia />}
                     </td>
                     <td className={`${tdCls} text-right tabular-nums`}>{conta(u.id, 'funcionario')}</td>
                     <td className={tdCls}><Selo texto={u.ativa ? 'Ativa' : 'Inativa'} /></td>
@@ -153,5 +155,12 @@ export default function AdminUnidades() {
         </TabelaWrap>
       </div>
     </>
+  );
+}
+
+function SemChefia() {
+  return (
+    <span className="ml-2 rounded-full border border-warning/20 bg-warning-light px-2 py-0.5 text-[11px] font-semibold text-warning"
+      title="Sem esta chefia cadastrada, o Supervisor assina no lugar">falta</span>
   );
 }

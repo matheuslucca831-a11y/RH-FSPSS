@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Perfil } from './types';
+import type { Papel, Perfil } from './types';
 
 /**
  * Em que etapa do acesso a pessoa está. A regra de verdade fica no banco
@@ -12,7 +12,7 @@ export type Etapa = 'entrar' | 'cadastrar_mfa' | 'confirmar_mfa' | 'trocar_senha
 
 export type Seguranca = {
   ativo: boolean;
-  papel: 'funcionario' | 'chefia' | 'direcao';
+  papel: Papel;
   deve_trocar_senha: boolean;
   mfa_exigido: boolean;
   mfa_ok: boolean;
