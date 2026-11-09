@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowLeftRight, Ban, Check, ChevronDown, Clock, ExternalLink, Paperclip, Undo2, X, Zap } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeftRight, Ban, FileSignature, Check, ChevronDown, Clock, ExternalLink, Paperclip, Undo2, X, Zap } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { abrirComprovante } from '@/lib/funcoes';
 import { dataHoraBR } from '@/lib/formato';
@@ -133,6 +134,9 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1">
+          <Link href={`/comprovante?id=${s.id}`} className={linkCls}>
+            <FileSignature className="size-4" aria-hidden /> Documento assinado
+          </Link>
           <BotaoAnexo s={s} />
           <button type="button" onClick={() => setHistAberto((v) => !v)} aria-expanded={histAberto} className={linkCls}>
             <ChevronDown className={`size-4 transition-transform ${histAberto ? 'rotate-180' : ''}`} aria-hidden />
@@ -165,7 +169,7 @@ function BotaoAnexo({ s }: { s: Solicitacao }) {
     <>
       <button type="button" onClick={abrir} className={linkCls} disabled={abrindo}>
         <Paperclip className="size-4" aria-hidden />
-        {s.anexo_bucket === 'anexos' ? 'Comprovante (sistema antigo)' : 'Ver comprovante'}
+        {s.anexo_bucket === 'anexos' ? 'Anexo (sistema antigo)' : 'Ver anexo'}
         <ExternalLink className="size-3" aria-hidden />
       </button>
       {erro && <span role="alert" className="text-xs text-danger">{erro}</span>}

@@ -55,6 +55,7 @@ Supabase > **Project Settings > API Keys**: gere chaves novas e desative as anti
 | `supabase/004_verificar_seguranca.sql` | Confere a instalação. Qualquer linha "PROBLEMA" precisa de atenção. |
 | `supabase/005_correcao_acesso.sql` | Correção do acesso (perfil na checagem de segurança). |
 | `supabase/006_fluxo_circular_254.sql` | **Fluxo de assinaturas da Circular nº 254/2026** (papéis, ausências, assinaturas). Rodar depois do 005. |
+| `supabase/007_assinatura_eletronica.sql` | **Assinatura eletrônica com confirmação de senha**, código do documento (SHA-256), QR code e verificação pública. Rodar depois do 006. |
 
 ### 2. Configurações do Supabase (painel)
 
@@ -146,3 +147,12 @@ supabase/                     Scripts SQL e Edge Functions
 - **Folga para gozo imediato**: com Enfermeiro ou Gerente ausente, o outro assina sozinho, registrando que a outra chefia está ciente.
 - **Ausências**: registradas em "Ausências das chefias" liberam o substituto na hora. Sem registro, o substituto assina declarando o motivo (fica no histórico). Férias de chefia aprovadas no sistema viram ausência automaticamente.
 - Em Administração > Usuários, defina para cada pessoa o **Acesso** (Funcionário, Enfermeiro responsável, Gerente, Supervisor, Coordenação, Direção), **Quem assina os pedidos** (Cargos gerais, Farmácia, Enfermeiro, Gerente) e, para Supervisor, as **unidades que acompanha**.
+
+
+## Assinatura eletrônica (Lei nº 14.063/2020)
+
+- Para **enviar, aprovar ou negar** um pedido, a pessoa confirma a **senha de acesso**. A senha não é gravada: ela gera uma autorização de uso único, válida por 2 minutos. Depois de 5 senhas erradas em 15 minutos, a assinatura fica travada por 15 minutos.
+- Cada assinatura registra a data e a hora do servidor, o aparelho, o endereço de rede e o **código do documento** (SHA-256 do conteúdo assinado). Pedidos e assinaturas não podem ser alterados depois.
+- **Documento assinado** (botão no cartão do pedido): página pronta para imprimir ou salvar em PDF, com QR code.
+- **Verificação pública**: `/verificar?c=CODIGO`, sem login. Mostra só o essencial (nome reduzido, matrícula mascarada, sem justificativa nem anexo) e diz se o documento continua íntegro.
+- Recomendação: a FSPSS publicar uma portaria reconhecendo esta forma de assinatura nas solicitações de RH (art. 5º da Lei 14.063/2020).

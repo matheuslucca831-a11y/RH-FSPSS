@@ -23,7 +23,7 @@ export default function MinhaConta({ perfil }: { perfil: Perfil }) {
 
   return (
     <div className="w-full space-y-6">
-      <Cabecalho icone={UserCog} titulo="Minha conta" descricao="Senha, verificação em duas etapas e aparelhos conectados." />
+      <Cabecalho icone={UserCog} titulo="Minha conta" descricao="Senha (também usada para assinar os pedidos), verificação em duas etapas e aparelhos conectados." />
 
       <section className="dock-card grid gap-4 p-5 sm:grid-cols-3 sm:p-6">
         <Info rotulo="Nome" valor={perfil.nome} />
@@ -206,3 +206,4 @@ function DuasEtapas({ exigido }: { exigido: boolean }) {
     </section>
   );
 }
+

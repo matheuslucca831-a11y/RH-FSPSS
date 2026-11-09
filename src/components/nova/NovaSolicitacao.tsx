@@ -14,6 +14,7 @@ import {
 } from '@/lib/solicitacoes';
 import { dataBR } from '@/lib/formato';
 import type { Perfil } from '@/lib/types';
+import CampoAssinatura, { autorizarComSenha } from '@/components/assinatura/CampoAssinatura';
 import { Aviso, Botao, Cabecalho, Campo, inputCls } from '@/components/ui';
 
 type Form = {
@@ -60,8 +61,9 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
   const [f, setF] = useState<Form>(() => novoForm(categoriaInicial));
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [senha, setSenha] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [feito, setFeito] = useState<{ protocolo: string; situacao: string } | null>(null);
+  const [feito, setFeito] = useState<{ id: string; protocolo: string; situacao: string } | null>(null);
   const inputArquivo = useRef<HTMLInputElement>(null);
   const [aprovadas, setAprovadas] = useState<Aprovada[] | null>(null);
   const [destinos, setDestinos] = useState<{ id: string; nome: string }[]>([]);
@@ -116,6 +118,7 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
   const justificativaObrigatoria = f.tipo === 'Outros' || ['saida', 'estagio', 'transferencia'].includes(f.categoria);
 
   function validar(): string | null {
+    if (!senha) return 'Digite a sua senha para assinar e enviar.';
     if (f.categoria === 'cancelamento') {
       if (!f.referencia_id) return 'Escolha a folga ou as férias que deseja cancelar.';
     } else if (!f.data_inicio) return 'Informe a data.';
@@ -139,6 +142,13 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
     if (msg) return setErro(msg);
     setErro(null);
     setEnviando(true);
+
+    // Confere a senha antes de subir anexo e gravar o pedido
+    const assin = await autorizarComSenha(supabase, senha);
+    if (assin.erro) {
+      setEnviando(false);
+      return setErro(assin.erro);
+    }
 
     let caminho: string | null = null;
     if (arquivo) {
@@ -164,11 +174,12 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
       justificativa: f.justificativa.trim() || null,
       anexo_path: caminho,
       anexo_nome: arquivo ? arquivo.name.slice(0, 200) : null,
+      token_assinatura: assin.token,
       gozo_imediato: podeGozoImediato && f.gozo_imediato,
       referencia_id: f.categoria === 'cancelamento' ? f.referencia_id : null,
       unidade_destino_id: f.categoria === 'transferencia' ? f.unidade_destino_id : null,
       // o banco completa quem pediu, unidade, protocolo, caminho das assinaturas e situação
-    }).select('protocolo, situacao').single();
+    }).select('id, protocolo, situacao').single();
 
     if (error || !data) {
       if (caminho) await supabase.storage.from('comprovantes').remove([caminho]);
@@ -196,6 +207,7 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
             <Link href="/minhas" className="dock-btn-primary">
               Acompanhar em Minhas solicitações
             </Link>
+            <Link href={`/comprovante?id=${feito.id}`} className="dock-btn-ghost">Ver comprovante assinado</Link>
             <Botao variante="secundario" onClick={() => { setF(novoForm(f.categoria)); setArquivo(null); setFeito(null); }}>Fazer outra</Botao>
           </div>
         </div>
@@ -347,10 +359,15 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
             )}
           </div>
 
+          <fieldset className="border-t border-linha pt-5">
+            <legend className="sr-only">Assinatura</legend>
+            <CampoAssinatura id="senha-assinatura" valor={senha} onChange={setSenha} />
+          </fieldset>
+
           {erro && <Aviso>{erro}</Aviso>}
 
           <div className="flex justify-end">
-            <Botao type="submit" carregando={enviando} className="w-full sm:w-auto">Enviar solicitação</Botao>
+            <Botao type="submit" carregando={enviando} className="w-full sm:w-auto">Assinar e enviar</Botao>
           </div>
         </div>
 

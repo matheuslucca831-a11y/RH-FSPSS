@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { mensagemErro } from '@/lib/formato';
+import CampoAssinatura, { autorizarComSenha } from '@/components/assinatura/CampoAssinatura';
 import { MOTIVOS_AUSENCIA, ROTULO_VAGA, type ItemFila, type MotivoAusencia, type Solicitacao, type Vaga } from '@/lib/solicitacoes';
 import { Botao, campoCls, inputCls } from '@/components/ui';
 
@@ -23,6 +24,7 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
   const [sozinho, setSozinho] = useState(false);
   const [ocupado, setOcupado] = useState<'sim' | 'nao' | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [senha, setSenha] = useState('');
 
   const titular = item.como === 'titular';
   const outra = s.pendentes.find((v) => v !== item.vagas[0]);
@@ -50,11 +52,15 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
     if (aprovar && pedeMotivo && !motivo) return setErro(`Informe por que ${ausenteDe} está ausente.`);
     setErro(null);
     setOcupado(aprovar ? 'sim' : 'nao');
-    const { data, error } = await createClient().rpc('assinar', {
+    const supabase = createClient();
+    const a = await autorizarComSenha(supabase, senha);
+    if (a.erro) { setOcupado(null); return setErro(a.erro); }
+    const { data, error } = await supabase.rpc('assinar', {
       p_id: s.id, p_aprovar: aprovar, p_obs: obs.trim() || null,
       p_no_lugar_de: item.como === 'supervisor' ? vaga || null : null,
       p_motivo_ausencia: pedeMotivo || (!aprovar && motivo) ? motivo || null : null,
       p_outra_ciente: podeSozinho && sozinho,
+      p_token: a.token,
     });
     setOcupado(null);
     if (error) return setErro(mensagemErro(error));
@@ -67,12 +73,19 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
     );
   }
 
+  const blocoAssinatura = (
+    <div className="w-full">
+      <CampoAssinatura id={`senha-${s.id}`} valor={senha} onChange={setSenha} compacto />
+    </div>
+  );
+
   if (negando) {
     return (
       <div className="w-full rounded-2xl border border-danger/25 bg-danger-light/50 p-4 sm:min-w-96">
         <label className="block text-xs font-semibold text-erro" htmlFor={`motivo-${s.id}`}>Motivo da negativa (a pessoa vai ver)</label>
         <textarea id={`motivo-${s.id}`} rows={2} value={obs} onChange={(e) => setObs(e.target.value)} autoFocus
           className={`${inputCls} mt-1`} />
+        <div className="mt-3">{blocoAssinatura}</div>
         {erro && <p role="alert" className="mt-2 text-sm text-erro">{erro}</p>}
         <div className="mt-2 flex justify-end gap-2">
           <Botao variante="discreto" onClick={() => { setNegando(false); setErro(null); }}>Voltar</Botao>
@@ -84,10 +97,10 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
     );
   }
 
-  const comOpcoes = item.como === 'supervisor' || item.como === 'gerente_substituto' || podeSozinho;
+  const comOpcoes = true;
   return (
-    <div className={comOpcoes ? 'w-full space-y-3' : 'contents'}>
-      {comOpcoes && (
+    <div className={comOpcoes ? 'w-full space-y-3' : 'flex flex-wrap items-center justify-end gap-3'}>
+      {(item.como === 'supervisor' || item.como === 'gerente_substituto' || podeSozinho) && (
         <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-warning/25 bg-warning-light/40 p-3.5 text-sm">
           {item.como === 'gerente_substituto' && (
             <p className="w-full text-warning">Saída antecipada e estágio: o Gerente assina só na ausência do Enfermeiro responsável.</p>
@@ -128,6 +141,7 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
           )}
         </div>
       )}
+      {blocoAssinatura}
       {erro && <p role="alert" className="w-full text-right text-sm text-erro">{erro}</p>}
       <div className={comOpcoes ? 'flex flex-wrap justify-end gap-2' : 'contents'}>
         <Botao variante="secundario" onClick={() => setNegando(true)} disabled={!!ocupado}>
