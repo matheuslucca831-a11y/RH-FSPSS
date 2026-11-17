@@ -274,7 +274,8 @@ language sql stable security definer set search_path = public as $$
         else '{}'::text[]
       end as vagas,
       case
-        when eu.papel = 'direcao' and s.situacao <> 'Aguardando direção' then true
+        when eu.papel = 'direcao' and (s.situacao = 'Aguardando chefia'
+             or (s.situacao = 'Aguardando coordenação' and s.categoria <> 'transferencia')) then true
         when eu.papel = 'gerente' and not (eu.papel = any(s.pendentes)) then not vaga_ausente(s.unidade_id, 'enfermeiro')
         when eu.papel = 'supervisor' and s.fluxo = 'um'
           then not (vaga_ausente(s.unidade_id, 'enfermeiro') and vaga_ausente(s.unidade_id, 'gerente'))
