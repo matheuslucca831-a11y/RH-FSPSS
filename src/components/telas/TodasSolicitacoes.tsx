@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, useState } from 'react';
-import { Archive, ChevronDown, Download, Table2 } from 'lucide-react';
+import { Archive, ChevronDown, Download, SlidersHorizontal, Table2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useConsulta } from '@/lib/cacheTela';
@@ -32,6 +32,7 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
   const [ate, setAte] = useState('');
 
   const { perfil } = usePerfil();
+  const [verFiltros, setVerFiltros] = useState(false);
   const direcao = perfil.papel === 'direcao';
   const { dados, erro, atualizando, recarregar } = useConsulta(arquivo ? 'arquivo' : 'todas', () =>
     buscarSolicitacoes(supabase, (q) => q.eq('arquivado', arquivo)));
@@ -55,6 +56,7 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
   }, [dados, busca, situacao, cat, unidade, de, ate]);
   const pag = usePaginacao(visiveis, 50);
   const filtrando = !!(busca || situacao || cat || unidade || de || ate);
+  const filtrosAtivos = [situacao, cat, unidade, de, ate].filter(Boolean).length;
 
   function feito(m: string) {
     setOk(m);
@@ -85,10 +87,19 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
         </Botao>
       </Cabecalho>
 
-      <div className="dock-card mt-6 grid gap-3 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-8">
+      <div className="dock-card mt-4 grid gap-3 p-4 sm:mt-6 sm:grid-cols-2 sm:p-5 lg:grid-cols-8">
         <Campo rotulo="Buscar" className="sm:col-span-2">
-          <CampoBusca valor={busca} onChange={setBusca} placeholder="Nome, matrícula ou protocolo" />
+          <div className="flex gap-2">
+            <CampoBusca valor={busca} onChange={setBusca} placeholder="Nome, matrícula ou protocolo" className="flex-1" />
+            {/* No celular, os outros filtros ficam recolhidos */}
+            <button type="button" onClick={() => setVerFiltros((v) => !v)} aria-expanded={verFiltros}
+              className={`inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border px-4 text-xs font-semibold sm:hidden ${
+                verFiltros || filtrosAtivos ? 'border-electric-cobalt bg-lavender-mist text-electric-cobalt' : 'border-linha bg-white text-mid-graphite'}`}>
+              <SlidersHorizontal className="size-4" aria-hidden /> Filtros{filtrosAtivos ? ` (${filtrosAtivos})` : ''}
+            </button>
+          </div>
         </Campo>
+        <div className={`${verFiltros ? 'contents' : 'hidden'} sm:contents`}>
         <Campo rotulo="Situação">
           <select value={situacao} onChange={(e) => setSituacao(e.target.value as Situacao | '')} className={inputCls}>
             <option value="">Todas</option>
@@ -110,6 +121,7 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
         <div className="grid grid-cols-2 gap-2 lg:col-span-2">
           <Campo rotulo="De"><input type="date" value={de} onChange={(e) => setDe(e.target.value)} className={inputCls} /></Campo>
           <Campo rotulo="Até"><input type="date" value={ate} min={de || undefined} onChange={(e) => setAte(e.target.value)} className={inputCls} /></Campo>
+        </div>
         </div>
         {filtrando && (
           <div className="sm:col-span-2 lg:col-span-8 flex items-center justify-between text-sm text-tinta-suave">

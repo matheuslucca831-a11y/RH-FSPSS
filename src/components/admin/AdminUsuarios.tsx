@@ -36,6 +36,8 @@ const BADGE: Record<Papel, string> = {
   funcionario: 'border-sky-200/70 bg-sky-50 text-sky-700',
 };
 const CHEFIAS: Papel[] = ['enfermeiro', 'gerente', 'supervisor'];
+/** Papéis que podem ter unidades vinculadas além da lotação */
+const COM_VINCULOS: Papel[] = ['enfermeiro', 'gerente', 'supervisor'];
 const GESTAO: Papel[] = ['coordenacao', 'direcao'];
 
 export default function AdminUsuarios({ meuId }: { meuId: string }) {
@@ -112,8 +114,9 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
     if (novo.papel === 'supervisor' && !novo.supervisiona.length) return setErro('Marque as unidades que o Supervisor acompanha.');
     setOcupado('novo');
     const r = await criarUsuario(novo);
-    if (!r.erro && r.id && novo.papel === 'supervisor') {
-      const { error } = await supabase.from('supervisao').insert(novo.supervisiona.map((u) => ({ supervisor_id: r.id, unidade_id: u })));
+    const vincular = COM_VINCULOS.includes(novo.papel) ? novo.supervisiona.filter((u) => u !== novo.unidade_id) : [];
+    if (!r.erro && r.id && vincular.length) {
+      const { error } = await supabase.from('supervisao').insert(vincular.map((u) => ({ supervisor_id: r.id, unidade_id: u })));
       if (error) { setOcupado(null); return setErro(`Acesso criado, mas as unidades do Supervisor não foram salvas: ${mensagemErro(error)}`); }
     }
     setOcupado(null);
@@ -139,7 +142,7 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
     }).eq('id', editando.id);
     if (error) { setOcupado(null); return setErro(mensagemErro(error)); }
     // Unidades acompanhadas pelo Supervisor
-    const novas = editando.papel === 'supervisor' ? editando.supervisiona : [];
+    const novas = COM_VINCULOS.includes(editando.papel) ? editando.supervisiona.filter((u) => u !== editando.unidade_id) : [];
     const tirar = (antes?.supervisiona ?? []).filter((u) => !novas.includes(u));
     const por = novas.filter((u) => !(antes?.supervisiona ?? []).includes(u));
     const r1 = tirar.length ? await supabase.from('supervisao').delete().eq('supervisor_id', editando.id).in('unidade_id', tirar) : { error: null };
@@ -270,8 +273,8 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
                 </select>
               </Campo>
             )}
-            {novo.papel === 'supervisor' && (
-              <UnidadesSupervisor unidades={unidadesAtivas} marcadas={novo.supervisiona} onChange={(v) => setNovo({ ...novo, supervisiona: v })} />
+            {COM_VINCULOS.includes(novo.papel) && (
+              <UnidadesSupervisor papel={novo.papel} lotacao={novo.unidade_id} unidades={unidadesAtivas} marcadas={novo.supervisiona} onChange={(v) => setNovo({ ...novo, supervisiona: v })} />
             )}
           </div>
           <div className="mt-4 flex items-center justify-end gap-2 border-t border-linha pt-3">
@@ -318,9 +321,9 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-electric-cobalt/20 bg-powder-blue/25 px-3 py-0.5 text-[11px] font-semibold text-electric-cobalt">
                         <MapPin className="size-3" aria-hidden /> Lotação: {u.unidade?.nome ?? (SEM_UNIDADE.includes(u.papel) ? 'Sede' : 'Não vinculada')}
                       </span>
-                      {u.papel === 'supervisor' && (
+                      {(u.papel === 'supervisor' || u.supervisiona.length > 0) && (
                         <span className="text-[11px] font-semibold text-violet-700">
-                          Supervisiona: {u.supervisiona.length ? u.supervisiona.map((id) => unidades.find((x) => x.id === id)?.nome).filter(Boolean).join(', ') : 'nenhuma unidade'}
+                          {u.papel === 'supervisor' ? 'Supervisiona' : 'Também chefia em'}: {u.supervisiona.length ? u.supervisiona.map((id) => unidades.find((x) => x.id === id)?.nome).filter(Boolean).join(', ') : 'nenhuma unidade'}
                         </span>
                       )}
                       <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-gray">
@@ -353,8 +356,8 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
                             </Campo>
                           )}
                         </div>
-                        {ed.papel === 'supervisor' && (
-                          <UnidadesSupervisor unidades={unidadesAtivas} marcadas={ed.supervisiona} onChange={(v) => setEditando({ ...ed, supervisiona: v })} />
+                        {COM_VINCULOS.includes(ed.papel) && (
+                          <UnidadesSupervisor papel={ed.papel} lotacao={ed.unidade_id} unidades={unidadesAtivas} marcadas={ed.supervisiona} onChange={(v) => setEditando({ ...ed, supervisiona: v })} />
                         )}
                         <div className="flex justify-end gap-2">
                           <Botao variante="discreto" onClick={() => setEditando(null)}>Cancelar</Botao>
@@ -411,12 +414,20 @@ function AcaoCartao({ icone: Icone, rotulo, onClick, perigo = false }: { icone: 
 }
 
 /** Unidades que o Supervisor acompanha (ele assina no lugar das chefias ausentes delas) */
-function UnidadesSupervisor({ unidades, marcadas, onChange }: { unidades: Unidade[]; marcadas: string[]; onChange: (v: string[]) => void }) {
+function UnidadesSupervisor({ papel, lotacao, unidades, marcadas, onChange }: {
+  papel: Papel; lotacao: string | null; unidades: Unidade[]; marcadas: string[]; onChange: (v: string[]) => void;
+}) {
+  const supervisor = papel === 'supervisor';
   return (
     <fieldset className="col-span-full rounded-xl border border-violet-200 bg-violet-50/50 p-3">
-      <legend className="px-1 text-xs font-semibold text-violet-700">Unidades que acompanha *</legend>
+      <legend className="px-1 text-xs font-semibold text-violet-700">
+        {supervisor ? 'Unidades que acompanha *' : 'Outras unidades em que também é chefia (opcional)'}
+      </legend>
+      {!supervisor && (
+        <p className="mb-2 text-[11px] text-slate-gray">Marque se esta pessoa assina os pedidos de mais de uma unidade. A lotação já está incluída.</p>
+      )}
       <div className="flex flex-wrap gap-2">
-        {unidades.map((x) => {
+        {unidades.filter((x) => supervisor || x.id !== lotacao).map((x) => {
           const on = marcadas.includes(x.id);
           return (
             <label key={x.id} className={`inline-flex min-h-[36px] cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${

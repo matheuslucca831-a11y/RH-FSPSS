@@ -19,9 +19,11 @@ type Props = {
   acoes?: ReactNode;
   /** Destaque de borda (ex.: aguardando você) */
   destaque?: boolean;
+  /** Caixa para marcar o pedido (assinar vários de uma vez) */
+  selecao?: { marcado: boolean; alternar: () => void };
 };
 
-export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes, destaque = false }: Props) {
+export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes, destaque = false, selecao }: Props) {
   const passos = linhaDoTempo(s);
   const parou = s.situacao === 'Negado' || s.situacao === 'Cancelado';
   const fim = s.situacao === 'Aprovado';
@@ -29,8 +31,15 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
   const [histAberto, setHistAberto] = useState(false);
 
   return (
-    <article className={`dock-card p-4 sm:p-5 ${destaque ? '!border-electric-cobalt/40 ring-1 ring-electric-cobalt/15' : s.situacao === 'Negado' ? '!border-danger/30' : ''}`}>
+    <article className={`dock-card p-4 sm:p-5 ${selecao?.marcado ? '!border-electric-cobalt ring-2 ring-electric-cobalt/25' : destaque ? '!border-electric-cobalt/40 ring-1 ring-electric-cobalt/15' : s.situacao === 'Negado' ? '!border-danger/30' : ''}`}>
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 items-start gap-3">
+        {selecao && (
+          <label className="-m-2 flex shrink-0 cursor-pointer p-2" title="Marcar para assinar junto com outros">
+            <input type="checkbox" checked={selecao.marcado} onChange={selecao.alternar} aria-label={`Marcar o pedido ${s.protocolo}`}
+              className="size-5 accent-electric-cobalt" />
+          </label>
+        )}
         <div className="min-w-0">
           {mostrarSolicitante ? (
             <>
@@ -47,6 +56,7 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
             <span className="font-medium">{rotuloTipo(s)}</span>
             <span className="text-tinta-suave"> | {periodo(s)}</span>
           </p>
+        </div>
         </div>
         <div className="flex items-center gap-2">
           {s.arquivado && <Selo texto="Arquivada" />}
@@ -91,7 +101,7 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
       )}
 
       {/* Linha das etapas */}
-      <ol className="mt-4 grid" style={{ gridTemplateColumns: `repeat(${passos.length}, minmax(0, 1fr))` }} aria-label="Andamento do pedido">
+      <ol className="mt-4 hidden sm:grid" style={{ gridTemplateColumns: `repeat(${passos.length}, minmax(0, 1fr))` }} aria-label="Andamento do pedido">
         {passos.map((p, k) => {
           const feito = p.estado === 'feito';
           const travou = p.estado === 'negado' || p.estado === 'cancelado';

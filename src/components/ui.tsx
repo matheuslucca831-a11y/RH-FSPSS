@@ -116,7 +116,7 @@ export function SeletorMes({ valor, onChange }: { valor: string; onChange: (c: s
 
 /** Tabela com rolagem horizontal própria */
 export function TabelaWrap({ children }: { children: ReactNode }) {
-  return <div className="dock-card overflow-x-auto">{children}</div>;
+  return <div className="dock-card min-w-0 max-w-full overflow-x-auto">{children}</div>;
 }
 export const thCls = 'whitespace-nowrap border-b border-linha bg-faint-gray/70 px-4 py-3 text-left text-xs font-semibold text-slate-gray';
 export const tdCls = 'border-b border-linha/70 px-4 py-3.5 align-middle text-sm text-ink-charcoal';
@@ -126,16 +126,16 @@ export function Cabecalho({ titulo, descricao, icone: Icone, children }: {
   titulo: string; descricao?: ReactNode; icone?: LucideIcon; children?: ReactNode;
 }) {
   return (
-    <div className="dock-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-      <div className="flex min-w-0 items-center gap-4">
+    <div className="dock-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-6">
+      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
         {Icone && (
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-electric-cobalt text-white shadow-xs">
-            <Icone className="size-6" aria-hidden />
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-electric-cobalt text-white shadow-xs sm:size-12 sm:rounded-2xl">
+            <Icone className="size-5 sm:size-6" aria-hidden />
           </div>
         )}
         <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight text-ink-charcoal sm:text-2xl">{titulo}</h1>
-          {descricao && <p className="mt-0.5 text-sm text-slate-gray">{descricao}</p>}
+          <h1 className="text-lg font-bold leading-tight tracking-tight text-ink-charcoal sm:text-2xl">{titulo}</h1>
+          {descricao && <p className="mt-0.5 line-clamp-2 text-xs text-slate-gray sm:line-clamp-none sm:text-sm">{descricao}</p>}
         </div>
       </div>
       {children && <div className="flex flex-wrap items-center gap-2.5">{children}</div>}
@@ -153,13 +153,14 @@ export function Abas<T extends string>({ abas, valor, onChange, rotulo, contagem
   contagem?: Partial<Record<T, number>>;
 }) {
   return (
-    <div role="tablist" aria-label={rotulo} className="flex flex-wrap gap-2">
+    <div role="tablist" aria-label={rotulo}
+      className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 [&::-webkit-scrollbar]:hidden">
       {abas.map(([v, r, Icone]) => {
         const ativo = valor === v;
         const n = contagem?.[v] ?? 0;
         return (
           <button key={v} role="tab" type="button" aria-selected={ativo} onClick={() => onChange(v)}
-            className={`inline-flex min-h-[40px] items-center gap-2 rounded-full px-5 py-2 text-xs font-semibold transition-all ${
+            className={`inline-flex min-h-[40px] shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition-all sm:px-5 ${
               ativo ? 'bg-electric-cobalt text-white shadow-xs' : 'border border-linha bg-white text-mid-graphite hover:bg-faint-gray hover:text-ink-charcoal'}`}>
             {Icone && <Icone className="size-4" aria-hidden />}
             {r}

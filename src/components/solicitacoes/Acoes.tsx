@@ -41,13 +41,15 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
     : outra ? `o ${ROTULO_VAGA[outra]}` : 'a outra chefia';
 
   // O que acontece depois desta assinatura
-  const restam = s.situacao === 'Aguardando chefia' && s.fluxo === 'ambos' && s.pendentes.length > 1 && !sozinho;
-  const rotuloAprovar = restam ? 'Assinar'
+  const direta = item.como === 'direcao_direta';
+  const restam = !direta && s.situacao === 'Aguardando chefia' && s.fluxo === 'ambos' && s.pendentes.length > 1 && !sozinho;
+  const rotuloAprovar = direta ? 'Aprovar direto' : restam ? 'Assinar'
     : s.situacao !== 'Aguardando direção' && s.precisa_direcao ? 'Assinar e enviar à Direção'
     : 'Aprovar';
 
   async function decidir(aprovar: boolean) {
     if (!aprovar && !obs.trim()) return setErro('Escreva o motivo da negativa.');
+    if (direta && !obs.trim()) return setErro('Explique por que a Direção decide sem as assinaturas pendentes.');
     if (item.como === 'supervisor' && !vaga) return setErro('Escolha no lugar de quem você assina.');
     if (aprovar && pedeMotivo && !motivo) return setErro(`Informe por que ${ausenteDe} está ausente.`);
     setErro(null);
@@ -100,8 +102,22 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
   const comOpcoes = true;
   return (
     <div className={comOpcoes ? 'w-full space-y-3' : 'flex flex-wrap items-center justify-end gap-3'}>
-      {(item.como === 'supervisor' || item.como === 'gerente_substituto' || podeSozinho) && (
+      {(item.como === 'supervisor' || item.como === 'gerente_substituto' || podeSozinho || direta) && (
         <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-warning/25 bg-warning-light/40 p-3.5 text-sm">
+          {direta && (
+            <div className="w-full space-y-2">
+              <p className="text-warning">
+                <strong>Decisão direta da Direção.</strong> Aprova ou nega sem esperar
+                {s.situacao === 'Aguardando chefia' ? ' as assinaturas da unidade' : ' a avaliação da Coordenação'}.
+                Use quando a unidade estiver sem chefia ou a avaliação não puder ser feita.
+              </p>
+              <label className="block">
+                <span className="text-xs font-semibold text-tinta-suave">Motivo (fica no histórico e no documento) *</span>
+                <textarea rows={2} value={obs} onChange={(e) => setObs(e.target.value)} className={`${inputCls} mt-1`}
+                  placeholder="Ex.: unidade sem Enfermeiro e sem Gerente nesta semana" />
+              </label>
+            </div>
+          )}
           {item.como === 'gerente_substituto' && (
             <p className="w-full text-warning">Saída antecipada e estágio: o Gerente assina só na ausência do Enfermeiro responsável.</p>
           )}

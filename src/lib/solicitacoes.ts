@@ -90,7 +90,7 @@ export const CAMPOS_SOLICITACAO =
 /** Item da fila de assinaturas (função fila_assinaturas do banco) */
 export type ItemFila = {
   id: string;
-  como: 'titular' | 'gerente_substituto' | 'supervisor' | 'coordenacao' | 'direcao';
+  como: 'titular' | 'gerente_substituto' | 'supervisor' | 'coordenacao' | 'direcao' | 'direcao_direta';
   vagas: Vaga[];
   ausentes: Vaga[];
   precisa_motivo: boolean;

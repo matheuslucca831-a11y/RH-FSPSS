@@ -155,7 +155,7 @@ export default function Relatorios() {
         </div>
 
         <div className="mt-8 grid gap-6 xl:grid-cols-2">
-          <section>
+          <section className="min-w-0">
             <h2 className="text-lg font-bold">Por tipo</h2>
             <div className="mt-3">
               <TabelaWrap>
@@ -182,7 +182,7 @@ export default function Relatorios() {
             </div>
           </section>
 
-          <section>
+          <section className="min-w-0">
             <h2 className="text-lg font-bold">Quem mais pediu no mês</h2>
             <div className="mt-3">
               <TabelaWrap>

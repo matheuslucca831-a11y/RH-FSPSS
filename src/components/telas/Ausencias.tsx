@@ -9,7 +9,7 @@ import { MOTIVOS_AUSENCIA, ROTULO_VAGA, periodo, type MotivoAusencia } from '@/l
 import type { Perfil } from '@/lib/types';
 import { Aviso, Botao, Cabecalho, Campo, Selo, TabelaWrap, Vazio, inputCls, tdCls, thCls } from '@/components/ui';
 
-type Chefia = { id: string; nome: string; papel: 'enfermeiro' | 'gerente'; unidade_id: string; unidade: { nome: string } | null };
+type Chefia = { id: string; nome: string; papel: 'enfermeiro' | 'gerente'; unidade_id: string; unidade: { nome: string } | null; unidades: string[] };
 type Ausencia = {
   id: string; perfil_id: string; perfil_nome: string; papel: string; unidade_id: string | null; inicio: string; fim: string;
   motivo: MotivoAusencia; observacao: string | null; registrado_nome: string | null; solicitacao_id: string | null;
@@ -30,31 +30,43 @@ export default function Ausencias({ perfil }: { perfil: Perfil }) {
   const hoje = hojeISO();
 
   const { dados, erro: erroCarga, recarregar } = useConsulta(`ausencias:${perfil.id}`, async () => {
-    const [c, a] = await Promise.all([
+    const [c, a, sv, un] = await Promise.all([
       supabase.from('perfis').select('id, nome, papel, unidade_id, unidade:unidades!perfis_unidade_id_fkey(nome)').in('papel', ['enfermeiro', 'gerente']).eq('ativo', true).order('nome'),
       supabase.from('ausencias').select('id, perfil_id, perfil_nome, papel, unidade_id, inicio, fim, motivo, observacao, registrado_nome, solicitacao_id')
         .order('inicio', { ascending: false }).limit(500),
+      supabase.from('supervisao').select('supervisor_id, unidade_id'),
+      supabase.from('unidades').select('id, nome'),
     ]);
     if (c.error || a.error) throw new Error((c.error ?? a.error)!.message);
-    return { chefias: (c.data as unknown as Chefia[]) ?? [], ausencias: (a.data as Ausencia[]) ?? [] };
+    // Cada chefia atua na lotação e nas unidades vinculadas
+    const vinc = (sv.data as { supervisor_id: string; unidade_id: string }[]) ?? [];
+    const chefias = ((c.data as unknown as Chefia[]) ?? []).map((x) => ({
+      ...x, unidades: [x.unidade_id, ...vinc.filter((v) => v.supervisor_id === x.id).map((v) => v.unidade_id)].filter(Boolean),
+    }));
+    const nomes = new Map(((un.data as { id: string; nome: string }[]) ?? []).map((u) => [u.id, u.nome]));
+    return { chefias, ausencias: (a.data as Ausencia[]) ?? [], nomes };
   });
 
   // Quem esta pessoa pode registrar (o banco confere de novo)
+  const minhas = useMemo(() => [perfil.unidade_id, ...(perfil.supervisiona ?? [])].filter(Boolean) as string[], [perfil]);
   const gerenciaveis = useMemo(() => (dados?.chefias ?? []).filter((c) =>
     perfil.papel === 'direcao' || perfil.papel === 'coordenacao' || c.id === perfil.id
-    || (perfil.papel === 'gerente' && c.unidade_id === perfil.unidade_id)
-    || (perfil.papel === 'supervisor' && (perfil.supervisiona ?? []).includes(c.unidade_id))), [dados, perfil]);
+    || ((perfil.papel === 'gerente' || perfil.papel === 'supervisor') && c.unidades.some((u) => minhas.includes(u)))), [dados, perfil, minhas]);
   const podeGerir = (perfilId: string) => gerenciaveis.some((g) => g.id === perfilId);
 
   // Situação de hoje, por unidade: Enfermeiro e Gerente presentes?
   const unidades = useMemo(() => {
     const m = new Map<string, { nome: string; enfermeiro: Chefia[]; gerente: Chefia[] }>();
     for (const c of dados?.chefias ?? []) {
-      if (!m.has(c.unidade_id)) m.set(c.unidade_id, { nome: c.unidade?.nome ?? 'Unidade', enfermeiro: [], gerente: [] });
-      m.get(c.unidade_id)![c.papel].push(c);
+      for (const u of c.unidades) {
+        // fora da Direção/Coordenação, mostra só as unidades de quem está usando
+        if (!['direcao', 'coordenacao'].includes(perfil.papel) && !minhas.includes(u) && c.id !== perfil.id) continue;
+        if (!m.has(u)) m.set(u, { nome: dados?.nomes.get(u) ?? 'Unidade', enfermeiro: [], gerente: [] });
+        m.get(u)![c.papel].push(c);
+      }
     }
     return [...m.entries()].sort((a, b) => a[1].nome.localeCompare(b[1].nome, 'pt-BR'));
-  }, [dados]);
+  }, [dados, perfil, minhas]);
   const ausenteHoje = (id: string) => (dados?.ausencias ?? []).find((a) => a.perfil_id === id && a.inicio <= hoje && a.fim >= hoje);
 
   const atuais = (dados?.ausencias ?? []).filter((a) => a.fim >= hoje).sort((a, b) => a.inicio.localeCompare(b.inicio));
@@ -147,7 +159,9 @@ export default function Ausencias({ perfil }: { perfil: Perfil }) {
                 <select value={form.perfil_id} onChange={(e) => setForm({ ...form, perfil_id: e.target.value })} className={inputCls}>
                   <option value="">Selecione</option>
                   {gerenciaveis.map((g) => (
-                    <option key={g.id} value={g.id}>{g.nome} | {ROTULO_VAGA[g.papel]} | {g.unidade?.nome}</option>
+                    <option key={g.id} value={g.id}>
+                      {g.nome} | {ROTULO_VAGA[g.papel]} | {g.unidades.map((u) => dados?.nomes.get(u)).filter(Boolean).join(', ')}
+                    </option>
                   ))}
                 </select>
               </Campo>

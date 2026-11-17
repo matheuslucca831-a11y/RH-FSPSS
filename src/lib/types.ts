@@ -15,7 +15,7 @@ export type Perfil = {
   unidade_id: string | null;
   ativo: boolean;
   unidade: { nome: string; sigla: string | null } | null;
-  /** Unidades que o Supervisor acompanha */
+  /** Unidades vinculadas além da lotação (Supervisor, Enfermeiro responsável e Gerente) */
   supervisiona?: string[];
 };
 
