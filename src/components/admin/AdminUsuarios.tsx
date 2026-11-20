@@ -134,7 +134,7 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
     const nome = fluxoLote === 'sem' ? 'sem fluxo (só a Direção)' : nomeFluxo(fluxoLote);
     setMarcados(new Set());
     setFluxoLote('');
-    concluir(`Fluxo "${nome}" aplicado a ${ids.length} ${ids.length === 1 ? 'pessoa' : 'pessoas'}. Vale para os próximos pedidos; os que já foram enviados seguem o caminho de quando foram enviados.`);
+    concluir(`Fluxo "${nome}" aplicado a ${ids.length} ${ids.length === 1 ? 'pessoa' : 'pessoas'}. Os pedidos que ainda aguardam assinatura passam a seguir o fluxo novo (as assinaturas já feitas continuam valendo).`);
   }
 
   function concluir(msg: string) {
