@@ -57,6 +57,7 @@ const TONS: Record<Tom, { caixa: string; ponto: string }> = {
   cheio: { caixa: 'bg-electric-cobalt text-white border-electric-cobalt', ponto: 'bg-white' },
 };
 const SELOS: Record<string, Tom> = {
+  'Aguardando assinatura': 'atencao',
   'Aguardando chefia': 'atencao',
   'Aguardando direção': 'info',
   'Aguardando coordenação': 'info',

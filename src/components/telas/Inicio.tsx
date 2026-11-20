@@ -19,21 +19,24 @@ type Painel = {
   substituicao: number | null;
   paradasNaChefia: number | null;
   noMes: number | null;
+  semBaixa: number | null;
 };
 
 export default function Inicio({ perfil }: { perfil: Perfil }) {
   const supabase = useMemo(() => createClient(), []);
   const { dados, erro } = useConsulta<Painel>(`inicio:${perfil.id}`, async () => {
     const conta = () => supabase.from('solicitacoes').select('id', { count: 'exact', head: true });
-    const assina = perfil.papel !== 'funcionario';
+    const assina = true;
     const gestao = perfil.papel === 'direcao' || perfil.papel === 'coordenacao';
-    const [ult, abertas, fila, parada, mes] = await Promise.all([
+    const rh = perfil.papel === 'rh' || perfil.papel === 'direcao';
+    const [ult, abertas, fila, parada, mes, baixa] = await Promise.all([
       supabase.from('solicitacoes').select('id, protocolo, categoria, tipo, subtipo, data_inicio, data_fim, situacao, criado_em')
         .eq('solicitante_id', perfil.id).order('criado_em', { ascending: false }).limit(5),
       conta().eq('solicitante_id', perfil.id).like('situacao', 'Aguardando%'),
       assina ? buscarFila(supabase).catch(() => []) : null,
-      gestao ? conta().eq('situacao', 'Aguardando chefia') : null,
+      gestao ? conta().eq('situacao', 'Aguardando assinatura').eq('etapa_atual', 0) : null,
       gestao ? conta().gte('criado_em', competenciaAtual()) : null,
+      rh ? conta().eq('situacao', 'Aprovado').is('baixa_em', null) : null,
     ]);
     if (ult.error) throw new Error(ult.error.message);
     return {
@@ -43,6 +46,7 @@ export default function Inicio({ perfil }: { perfil: Perfil }) {
       substituicao: fila ? fila.filter((i) => i.precisa_motivo).length : null,
       paradasNaChefia: parada?.count ?? null,
       noMes: mes?.count ?? null,
+      semBaixa: baixa?.count ?? null,
     };
   });
 
@@ -50,12 +54,13 @@ export default function Inicio({ perfil }: { perfil: Perfil }) {
   const local = perfil.unidade?.nome ?? (perfil.papel === 'funcionario' ? undefined : 'Sede');
 
   const blocos: { rotulo: string; valor: number | null | undefined; href: string; forte?: boolean; texto: string }[] = [
-    ...(perfil.papel !== 'funcionario' ? [{ rotulo: 'Aguardando a sua assinatura', valor: dados?.paraAssinar, href: '/aprovacoes', forte: true, texto: 'Assinar agora' }] : []),
+    ...(perfil.papel !== 'funcionario' || dados?.paraAssinar ? [{ rotulo: 'Aguardando a sua assinatura', valor: dados?.paraAssinar, href: '/aprovacoes', forte: true, texto: 'Assinar agora' }] : []),
     ...(dados?.substituicao ? [{ rotulo: 'Para assinar como substituto', valor: dados.substituicao, href: '/aprovacoes', texto: 'Ver pedidos' }] : []),
     ...(perfil.papel === 'direcao' || perfil.papel === 'coordenacao' ? [
-      { rotulo: 'Ainda nas unidades', valor: dados?.paradasNaChefia, href: '/todas', texto: 'Em todas as unidades' },
+      { rotulo: 'Na primeira etapa', valor: dados?.paradasNaChefia, href: '/todas', texto: 'Em todas as unidades' },
       { rotulo: 'Pedidos neste mês', valor: dados?.noMes, href: '/relatorios', texto: 'Ver relatório' },
     ] : []),
+    ...(perfil.papel === 'rh' || perfil.papel === 'direcao' ? [{ rotulo: 'Aprovados sem baixa no RH', valor: dados?.semBaixa, href: '/baixa', forte: perfil.papel === 'rh', texto: 'Dar baixa' }] : []),
     { rotulo: 'Meus pedidos em análise', valor: dados?.minhasAbertas, href: '/minhas', texto: 'Acompanhar' },
   ];
 

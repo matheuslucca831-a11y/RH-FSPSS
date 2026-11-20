@@ -5,11 +5,12 @@ import { CalendarOff, Plus, Trash2, UserCheck, UserX } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useConsulta } from '@/lib/cacheTela';
 import { dataBR, hojeISO, mensagemErro } from '@/lib/formato';
-import { MOTIVOS_AUSENCIA, ROTULO_VAGA, periodo, type MotivoAusencia } from '@/lib/solicitacoes';
-import type { Perfil } from '@/lib/types';
+import { MOTIVOS_AUSENCIA, periodo, rotuloEtapa, type MotivoAusencia } from '@/lib/solicitacoes';
+import { PAPEIS, type Papel, type Perfil } from '@/lib/types';
+import Escolha from '@/components/Escolha';
 import { Aviso, Botao, Cabecalho, Campo, Selo, TabelaWrap, Vazio, inputCls, tdCls, thCls } from '@/components/ui';
 
-type Chefia = { id: string; nome: string; papel: 'enfermeiro' | 'gerente'; unidade_id: string; unidade: { nome: string } | null; unidades: string[] };
+type Chefia = { id: string; nome: string; papel: Papel; cargo: string | null; unidade_id: string; unidade: { nome: string } | null; unidades: string[] };
 type Ausencia = {
   id: string; perfil_id: string; perfil_nome: string; papel: string; unidade_id: string | null; inicio: string; fim: string;
   motivo: MotivoAusencia; observacao: string | null; registrado_nome: string | null; solicitacao_id: string | null;
@@ -17,8 +18,8 @@ type Ausencia = {
 type Form = { perfil_id: string; inicio: string; fim: string; motivo: MotivoAusencia | ''; obs: string };
 
 /**
- * Férias e afastamentos de Enfermeiros responsáveis e Gerentes.
- * Com a ausência registrada, o substituto (Supervisor, ou Gerente em saída/estágio) assina sem precisar declarar o motivo.
+ * Férias e afastamentos de quem assina pedidos.
+ * Com a ausência registrada, o substituto definido no fluxo assina sem precisar declarar o motivo.
  */
 export default function Ausencias({ perfil }: { perfil: Perfil }) {
   const supabase = useMemo(() => createClient(), []);
@@ -29,9 +30,12 @@ export default function Ausencias({ perfil }: { perfil: Perfil }) {
   const [verPassadas, setVerPassadas] = useState(false);
   const hoje = hojeISO();
 
+  const gestao = perfil.papel === 'direcao' || perfil.papel === 'coordenacao';
   const { dados, erro: erroCarga, recarregar } = useConsulta(`ausencias:${perfil.id}`, async () => {
+    // Direção e Coordenação registram a ausência de qualquer pessoa (quem assina pode ser qualquer um, conforme o fluxo)
+    const pessoas = supabase.from('perfis').select('id, nome, papel, cargo, unidade_id, unidade:unidades!perfis_unidade_id_fkey(nome)').eq('ativo', true).order('nome');
     const [c, a, sv, un] = await Promise.all([
-      supabase.from('perfis').select('id, nome, papel, unidade_id, unidade:unidades!perfis_unidade_id_fkey(nome)').in('papel', ['enfermeiro', 'gerente']).eq('ativo', true).order('nome'),
+      gestao ? pessoas : pessoas.in('papel', ['enfermeiro', 'gerente', 'supervisor', 'diretor']),
       supabase.from('ausencias').select('id, perfil_id, perfil_nome, papel, unidade_id, inicio, fim, motivo, observacao, registrado_nome, solicitacao_id')
         .order('inicio', { ascending: false }).limit(500),
       supabase.from('supervisao').select('supervisor_id, unidade_id'),
@@ -60,6 +64,7 @@ export default function Ausencias({ perfil }: { perfil: Perfil }) {
     for (const c of dados?.chefias ?? []) {
       for (const u of c.unidades) {
         // fora da Direção/Coordenação, mostra só as unidades de quem está usando
+        if (c.papel !== 'enfermeiro' && c.papel !== 'gerente') continue;
         if (!['direcao', 'coordenacao'].includes(perfil.papel) && !minhas.includes(u) && c.id !== perfil.id) continue;
         if (!m.has(u)) m.set(u, { nome: dados?.nomes.get(u) ?? 'Unidade', enfermeiro: [], gerente: [] });
         m.get(u)![c.papel].push(c);
@@ -106,8 +111,8 @@ export default function Ausencias({ perfil }: { perfil: Perfil }) {
 
   return (
     <div className="w-full space-y-6">
-      <Cabecalho icone={CalendarOff} titulo="Ausências das chefias"
-        descricao="Férias e afastamento médico de Enfermeiros responsáveis e Gerentes. Durante a ausência registrada, o Supervisor assina no lugar sem precisar declarar o motivo." />
+      <Cabecalho icone={CalendarOff} titulo="Ausências"
+        descricao="Férias e afastamento médico de quem assina pedidos. Durante a ausência registrada, o substituto do fluxo assina no lugar sem precisar declarar o motivo." />
 
       {(erro || erroCarga) && <Aviso>{erro ?? erroCarga}</Aviso>}
       {ok && <Aviso tom="info">{ok}</Aviso>}
@@ -125,14 +130,14 @@ export default function Ausencias({ perfil }: { perfil: Perfil }) {
                 {(['enfermeiro', 'gerente'] as const).map((v) => {
                   const lista = u[v];
                   if (!lista.length) {
-                    return <li key={v} className="flex items-center gap-2 text-warning"><UserX className="size-4" aria-hidden /> {ROTULO_VAGA[v]}: não cadastrado</li>;
+                    return <li key={v} className="flex items-center gap-2 text-warning"><UserX className="size-4" aria-hidden /> {rotuloEtapa(v)}: não cadastrado</li>;
                   }
                   return lista.map((c) => {
                     const fora = ausenteHoje(c.id);
                     return (
                       <li key={c.id} className={`flex items-center gap-2 ${fora ? 'text-danger' : 'text-mid-graphite'}`}>
                         {fora ? <UserX className="size-4 shrink-0" aria-hidden /> : <UserCheck className="size-4 shrink-0 text-forest" aria-hidden />}
-                        <span className="min-w-0 truncate">{ROTULO_VAGA[v]}: <strong>{c.nome}</strong>{fora ? ` (${fora.motivo} até ${dataBR(fora.fim)})` : ''}</span>
+                        <span className="min-w-0 truncate">{rotuloEtapa(v)}: <strong>{c.nome}</strong>{fora ? ` (${fora.motivo} até ${dataBR(fora.fim)})` : ''}</span>
                       </li>
                     );
                   });
@@ -156,20 +161,15 @@ export default function Ausencias({ perfil }: { perfil: Perfil }) {
           <div className="dock-card border-2 !border-electric-cobalt/30 p-5">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <Campo rotulo="Pessoa *" className="xl:col-span-2">
-                <select value={form.perfil_id} onChange={(e) => setForm({ ...form, perfil_id: e.target.value })} className={inputCls}>
-                  <option value="">Selecione</option>
-                  {gerenciaveis.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.nome} | {ROTULO_VAGA[g.papel]} | {g.unidades.map((u) => dados?.nomes.get(u)).filter(Boolean).join(', ')}
-                    </option>
-                  ))}
-                </select>
+                <Escolha valor={form.perfil_id} onChange={(v) => setForm({ ...form, perfil_id: v })} rotulo="Pessoa" placeholder="Digite o nome"
+                  opcoes={gerenciaveis.map((g) => ({
+                    valor: g.id, rotulo: g.nome,
+                    detalhe: [PAPEIS[g.papel]?.rotulo, g.cargo, g.unidades.map((u) => dados?.nomes.get(u)).filter(Boolean).join(', ')].filter(Boolean).join(' | '),
+                  }))} />
               </Campo>
               <Campo rotulo="Motivo *">
-                <select value={form.motivo} onChange={(e) => setForm({ ...form, motivo: e.target.value as MotivoAusencia })} className={inputCls}>
-                  <option value="">Selecione</option>
-                  {MOTIVOS_AUSENCIA.map((m) => <option key={m}>{m}</option>)}
-                </select>
+                <Escolha valor={form.motivo} onChange={(v) => setForm({ ...form, motivo: v as MotivoAusencia })} rotulo="Motivo" placeholder="Escolha"
+                  opcoes={MOTIVOS_AUSENCIA.map((m) => ({ valor: m, rotulo: m }))} />
               </Campo>
               <Campo rotulo="De *">
                 <input type="date" value={form.inicio} className={inputCls}
@@ -223,7 +223,7 @@ function TabelaAusencias({ itens, hoje, podeGerir, ocupado, onRemover, vazio }: 
             <tr key={a.id} className="hover:bg-faint-gray">
               <td className={tdCls}>
                 <span className="font-medium">{a.perfil_nome}</span>
-                <span className="block text-xs text-tinta-suave">{ROTULO_VAGA[a.papel] ?? a.papel}</span>
+                <span className="block text-xs text-tinta-suave">{PAPEIS[a.papel as Papel]?.rotulo ?? a.papel}</span>
               </td>
               <td className={`${tdCls} whitespace-nowrap`}>
                 {periodo({ data_inicio: a.inicio, data_fim: a.fim })}

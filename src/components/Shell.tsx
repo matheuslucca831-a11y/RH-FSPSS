@@ -31,8 +31,10 @@ export default function Shell({ perfil, children }: { perfil: Perfil; children: 
   const [pendentes, setPendentes] = useState<Record<string, number>>({});
   const [recontar, setRecontar] = useState(0);
   const areaAvisos = useRef<HTMLDivElement>(null);
+  // Funcionário ou RH que aparece num fluxo (pessoa específica ou cargo) também assina: o item surge quando há fila
+  const itens = rotasDo(perfil.papel).filter((r) => !r.soComFila?.includes(perfil.papel) || (pendentes['/aprovacoes'] ?? 0) > 0);
 
-  const itens = rotasDo(perfil.papel);
+
   const local = perfil.unidade?.nome ?? (perfil.papel === 'funcionario' ? 'Unidade' : 'Sede');
   const direcao = perfil.papel === 'direcao';
 
@@ -63,7 +65,7 @@ export default function Shell({ perfil, children }: { perfil: Perfil; children: 
     let vivo = true;
     async function contar() {
       const novo: Record<string, number> = {};
-      if (perfil.papel !== 'funcionario') novo['/aprovacoes'] = await contarFila(supabase);
+      novo['/aprovacoes'] = await contarFila(supabase);
       if (vivo) setPendentes(novo);
     }
     contar();
@@ -92,7 +94,7 @@ export default function Shell({ perfil, children }: { perfil: Perfil; children: 
   function buscar(e: React.FormEvent) {
     e.preventDefault();
     const q = busca.trim().slice(0, 80);
-    const destino = direcao || perfil.papel === 'coordenacao' ? '/todas' : perfil.papel !== 'funcionario' ? '/aprovacoes' : '/minhas';
+    const destino = direcao || perfil.papel === 'coordenacao' || perfil.papel === 'rh' ? '/todas' : perfil.papel !== 'funcionario' ? '/aprovacoes' : '/minhas';
     router.push(q ? `${destino}?q=${encodeURIComponent(q)}` : destino);
   }
 
@@ -231,7 +233,7 @@ export default function Shell({ perfil, children }: { perfil: Perfil; children: 
               </div>
             )}
 
-            {perfil.papel !== 'funcionario' && (
+            {(perfil.papel !== 'funcionario' || totalPendentes > 0) && (
               <div className="relative" ref={areaAvisos}>
                 <button type="button" title="Notificações" aria-expanded={avisosAbertos}
                   aria-label={totalPendentes > 0 ? `Notificações: ${totalPendentes} aguardando` : 'Notificações'}

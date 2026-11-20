@@ -15,18 +15,14 @@ import { autorizarComSenha } from '@/components/assinatura/CampoAssinatura';
 
 type Visao = 'voce' | 'substituir' | 'andamento' | 'finalizadas';
 
-const EXPLICA: Record<string, string> = {
-  enfermeiro: 'Cargos gerais: o pedido precisa da sua assinatura e da do Gerente. Saída antecipada e estágio: só a sua.',
-  gerente: 'Cargos gerais: a sua assinatura e a do Enfermeiro responsável. Enfermeiros: só a sua. Em saída antecipada e estágio, você assina só na ausência do Enfermeiro.',
-  supervisor: 'Você assina no lugar do Enfermeiro ou do Gerente em férias ou afastamento médico. Com a ausência registrada, o pedido aparece em "Aguardando você"; sem registro, em "Substituição", declarando o motivo.',
-  coordenacao: 'Pedidos dos Gerentes de unidade e transferências de lotação. Folgas, férias e cancelamentos seguem depois para a Direção.',
-  direcao: 'Decisão final de folgas, férias e cancelamentos já assinados pela unidade, e transferências de lotação. Em "Decidir direto" ficam os pedidos parados na unidade: a Direção pode decidir sem as chefias, com motivo.',
-};
+const EXPLICA = 'Quem assina cada pedido depende do fluxo de assinatura de quem pediu (definido pela Direção em "Fluxos de assinatura"). '
+  + 'Aqui aparecem os pedidos em que a sua assinatura é a próxima. Se você é substituto e a ausência do titular está registrada, '
+  + 'o pedido aparece em "Aguardando você"; sem registro, em "Substituição", declarando o motivo.';
 
 /** Pode entrar no "assinar vários": assinatura simples, sem escolher substituição nem escrever motivo */
-const simples = (i?: ItemFila) => !!i && !i.precisa_motivo && (i.como === 'titular' || i.como === 'coordenacao' || i.como === 'direcao');
+const simples = (i?: ItemFila) => !!i && !i.precisa_motivo && i.como === 'titular' && i.vagas.length === 1;
 
-/** Tudo o que espera a assinatura de quem está usando, conforme a Circular 254/2026 */
+/** Tudo o que espera a assinatura de quem está usando, conforme o fluxo de cada pedido */
 export default function ParaAssinar({ perfil }: { perfil: Perfil }) {
   const supabase = useMemo(() => createClient(), []);
   const [visao, setVisao] = useState<Visao>('voce');
@@ -36,7 +32,7 @@ export default function ParaAssinar({ perfil }: { perfil: Perfil }) {
   const [lote, setLote] = useState<{ feitos: number; total: number } | null>(null);
   const [erroLote, setErroLote] = useState<string | null>(null);
   const gestao = perfil.papel === 'direcao' || perfil.papel === 'coordenacao';
-  const variasUnidades = gestao || perfil.papel === 'supervisor' || (perfil.supervisiona?.length ?? 0) > 0;
+  const variasUnidades = gestao || perfil.papel === 'supervisor' || perfil.papel === 'diretor' || (perfil.supervisiona?.length ?? 0) > 0;
 
   const { dados, erro, recarregar } = useConsulta(`assinar:${perfil.id}`, async () => {
     const [fila, lista] = await Promise.all([
@@ -97,7 +93,7 @@ export default function ParaAssinar({ perfil }: { perfil: Perfil }) {
     if (falhas.length) setErroLote(falhas.join(' | '));
   }
 
-  const temSubstituicao = perfil.papel === 'supervisor' || perfil.papel === 'gerente' || perfil.papel === 'direcao' || grupos.substituir.length > 0;
+  const temSubstituicao = perfil.papel === 'direcao' || grupos.substituir.length > 0;
   const VISOES = [
     ['voce', 'Aguardando você'] as const,
     ...(temSubstituicao ? [['substituir', perfil.papel === 'direcao' ? 'Decidir direto' : 'Substituição'] as const] : []),
@@ -106,10 +102,10 @@ export default function ParaAssinar({ perfil }: { perfil: Perfil }) {
   ];
   const explicacao = visao === 'substituir'
     ? (perfil.papel === 'direcao'
-      ? 'Pedidos ainda parados na unidade ou na Coordenação. Quando a unidade estiver sem chefia, a Direção pode aprovar ou negar direto, informando o motivo.'
+      ? 'Pedidos que esperam a assinatura de outras pessoas. Quando não houver quem assine, a Direção pode aprovar ou negar direto, informando o motivo.'
       : 'Pedidos em que a chefia titular não tem ausência registrada. Para assinar no lugar dela, declare o motivo (férias ou afastamento médico); isso fica no histórico.')
-    : visao === 'andamento' ? 'Pedidos que esperam outra assinatura (da outra chefia, da Coordenação ou da Direção).'
-    : EXPLICA[perfil.papel] ?? '';
+    : visao === 'andamento' ? 'Pedidos que esperam a assinatura de outra pessoa.'
+    : EXPLICA;
 
   return (
     <div className={`w-full ${marcadosValidos.length ? 'pb-48 lg:pb-28' : ''}`}>

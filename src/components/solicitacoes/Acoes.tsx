@@ -5,21 +5,25 @@ import { Check, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { mensagemErro } from '@/lib/formato';
 import CampoAssinatura, { autorizarComSenha } from '@/components/assinatura/CampoAssinatura';
-import { MOTIVOS_AUSENCIA, ROTULO_VAGA, type ItemFila, type MotivoAusencia, type Solicitacao, type Vaga } from '@/lib/solicitacoes';
-import { Botao, campoCls, inputCls } from '@/components/ui';
+import { MOTIVOS_AUSENCIA, falta, rotuloVaga, type ItemFila, type MotivoAusencia, type Solicitacao } from '@/lib/solicitacoes';
+import { Botao, inputCls } from '@/components/ui';
+import Escolha from '@/components/Escolha';
 
 /** Avisa o menu lateral para recontar as pendências */
 export const avisarMudanca = () => window.dispatchEvent(new Event('siger:pendencias'));
 
 /**
- * Assinar / negar conforme a Circular 254/2026.
+ * Assinar / negar seguindo o fluxo copiado no pedido.
  * O item da fila (vindo do banco) diz em que condição a pessoa assina:
- * titular, Gerente no lugar do Enfermeiro, Supervisor no lugar de uma chefia, Coordenação ou Direção.
+ * titular de uma vaga, substituto de uma vaga ausente, ou Direção decidindo direto.
  */
 export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: ItemFila; onFeito: (msg: string) => void }) {
+  const et = s.rota?.[s.etapa_atual ?? 0];
+  const rotuloDe = (i: string) => (et?.vagas[+i] ? rotuloVaga(et.vagas[+i]) : 'a vaga');
   const [negando, setNegando] = useState(false);
   const [obs, setObs] = useState('');
-  const [vaga, setVaga] = useState<Vaga | ''>(() => (item.como === 'supervisor' ? item.ausentes[0] ?? item.vagas[0] ?? '' : item.vagas[0] ?? ''));
+  const [vaga, setVaga] = useState<string>(() =>
+    item.como === 'substituto' ? item.ausentes.find((i) => item.vagas.includes(i)) ?? item.vagas[0] ?? '' : item.vagas[0] ?? '');
   const [motivo, setMotivo] = useState<MotivoAusencia | ''>('');
   const [sozinho, setSozinho] = useState(false);
   const [ocupado, setOcupado] = useState<'sim' | 'nao' | null>(null);
@@ -27,30 +31,32 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
   const [senha, setSenha] = useState('');
 
   const titular = item.como === 'titular';
-  const outra = s.pendentes.find((v) => v !== item.vagas[0]);
-  const podeSozinho = titular && s.categoria === 'folga' && s.gozo_imediato && s.fluxo === 'ambos' && s.pendentes.length === 2 && !!outra;
+  const substituto = item.como === 'substituto';
+  const direta = item.como === 'direcao_direta';
+  const regraUm = et?.regra === 'um';
+  const outra = s.pendentes.find((v) => v !== vaga);
+  const podeSozinho = titular && s.categoria === 'folga' && s.gozo_imediato && !!et?.gozo_imediato && !regraUm
+    && s.pendentes.length === 2 && !!outra;
 
   // Precisa declarar o motivo da ausência (quando ela não está registrada no sistema)?
-  const pedeMotivo =
-    item.como === 'gerente_substituto' ? item.precisa_motivo
-      : item.como === 'supervisor' ? (s.fluxo === 'um' ? item.precisa_motivo : !!vaga && !item.ausentes.includes(vaga as Vaga))
-      : podeSozinho && sozinho ? !item.ausentes.includes(outra as Vaga)
-      : false;
-  const ausenteDe = item.como === 'gerente_substituto' ? 'o Enfermeiro responsável'
-    : item.como === 'supervisor' ? (s.fluxo === 'um' ? 'o Enfermeiro e o Gerente' : vaga ? `o ${ROTULO_VAGA[vaga]}` : 'a chefia')
-    : outra ? `o ${ROTULO_VAGA[outra]}` : 'a outra chefia';
+  const pedeMotivo = substituto ? (regraUm ? item.precisa_motivo : !!vaga && !item.ausentes.includes(vaga))
+    : podeSozinho && sozinho ? !item.ausentes.includes(outra!)
+    : false;
+  const ausenteDe = substituto
+    ? (regraUm && s.pendentes.length > 1 ? s.pendentes.map(rotuloDe).join(' e ') : rotuloDe(vaga))
+    : outra ? rotuloDe(outra) : 'a outra chefia';
 
   // O que acontece depois desta assinatura
-  const direta = item.como === 'direcao_direta';
-  const restam = !direta && s.situacao === 'Aguardando chefia' && s.fluxo === 'ambos' && s.pendentes.length > 1 && !sozinho;
-  const rotuloAprovar = direta ? 'Aprovar direto' : restam ? 'Assinar'
-    : s.situacao !== 'Aguardando direção' && s.precisa_direcao ? 'Assinar e enviar à Direção'
-    : 'Aprovar';
+  const total = s.rota?.length ?? 1;
+  const ultima = (s.etapa_atual ?? 0) >= total - 1;
+  const restam = !direta && !regraUm && s.pendentes.length > 1 && !sozinho;
+  const proxima = s.rota?.[(s.etapa_atual ?? 0) + 1];
+  const rotuloAprovar = direta ? 'Aprovar direto' : restam ? 'Assinar' : ultima ? 'Aprovar' : `Assinar e enviar: ${proxima?.nome}`;
 
   async function decidir(aprovar: boolean) {
     if (!aprovar && !obs.trim()) return setErro('Escreva o motivo da negativa.');
     if (direta && !obs.trim()) return setErro('Explique por que a Direção decide sem as assinaturas pendentes.');
-    if (item.como === 'supervisor' && !vaga) return setErro('Escolha no lugar de quem você assina.');
+    if (substituto && !vaga) return setErro('Escolha no lugar de quem você assina.');
     if (aprovar && pedeMotivo && !motivo) return setErro(`Informe por que ${ausenteDe} está ausente.`);
     setErro(null);
     setOcupado(aprovar ? 'sim' : 'nao');
@@ -59,7 +65,7 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
     if (a.erro) { setOcupado(null); return setErro(a.erro); }
     const { data, error } = await supabase.rpc('assinar', {
       p_id: s.id, p_aprovar: aprovar, p_obs: obs.trim() || null,
-      p_no_lugar_de: item.como === 'supervisor' ? vaga || null : null,
+      p_no_lugar_de: direta ? null : vaga || null,
       p_motivo_ausencia: pedeMotivo || (!aprovar && motivo) ? motivo || null : null,
       p_outra_ciente: podeSozinho && sozinho,
       p_token: a.token,
@@ -69,9 +75,9 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
     avisarMudanca();
     onFeito(
       !aprovar ? `Pedido de ${s.solicitante_nome} negado.`
-        : data === 'Aguardando chefia' ? `Você assinou o pedido de ${s.solicitante_nome}. Falta a outra assinatura da unidade.`
-        : data === 'Aguardando direção' ? `Pedido de ${s.solicitante_nome} assinado e enviado à Direção.`
-        : `Pedido de ${s.solicitante_nome} aprovado.`,
+        : data === 'Aprovado' ? `Pedido de ${s.solicitante_nome} aprovado.`
+        : restam ? `Você assinou o pedido de ${s.solicitante_nome}. Faltam as outras assinaturas da etapa.`
+        : `Pedido de ${s.solicitante_nome} assinado e enviado para: ${proxima?.nome ?? 'próxima etapa'}.`,
     );
   }
 
@@ -99,67 +105,69 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
     );
   }
 
-  const comOpcoes = true;
+  const escolhaVaga = (substituto && !regraUm && item.vagas.length > 1) || (titular && item.vagas.length > 1);
   return (
-    <div className={comOpcoes ? 'w-full space-y-3' : 'flex flex-wrap items-center justify-end gap-3'}>
-      {(item.como === 'supervisor' || item.como === 'gerente_substituto' || podeSozinho || direta) && (
+    <div className="w-full space-y-3">
+      {et && (
+        <p className="text-xs text-tinta-suave">
+          {total > 1 ? `Etapa ${(s.etapa_atual ?? 0) + 1} de ${total}: ` : ''}<strong className="text-ink-charcoal">{et.nome}</strong>
+          {' · '}{titular ? `você assina como ${item.rotulos.join(' / ')}` : substituto ? `você assina como ${rotuloVaga(et.substituto!)}` : 'decisão da Direção'}
+        </p>
+      )}
+      {(substituto || podeSozinho || direta || escolhaVaga) && (
         <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-warning/25 bg-warning-light/40 p-3.5 text-sm">
           {direta && (
             <div className="w-full space-y-2">
               <p className="text-warning">
-                <strong>Decisão direta da Direção.</strong> Aprova ou nega sem esperar
-                {s.situacao === 'Aguardando chefia' ? ' as assinaturas da unidade' : ' a avaliação da Coordenação'}.
-                Use quando a unidade estiver sem chefia ou a avaliação não puder ser feita.
+                <strong>Decisão direta da Direção.</strong> Aprova ou nega sem esperar {falta(s)}
+                {ultima ? '' : ' e as etapas seguintes'}. Use quando não houver quem assine.
               </p>
               <label className="block">
                 <span className="text-xs font-semibold text-tinta-suave">Motivo (fica no histórico e no documento) *</span>
                 <textarea rows={2} value={obs} onChange={(e) => setObs(e.target.value)} className={`${inputCls} mt-1`}
-                  placeholder="Ex.: unidade sem Enfermeiro e sem Gerente nesta semana" />
+                  placeholder="Ex.: unidade sem chefia nesta semana" />
               </label>
             </div>
           )}
-          {item.como === 'gerente_substituto' && (
-            <p className="w-full text-warning">Saída antecipada e estágio: o Gerente assina só na ausência do Enfermeiro responsável.</p>
+          {substituto && (
+            <p className="w-full text-warning">
+              Você assina como substituto: só na ausência {regraUm && s.pendentes.length > 1 ? `de todos (${ausenteDe})` : 'do titular'} por férias ou afastamento médico.
+            </p>
           )}
-          {item.como === 'supervisor' && s.fluxo !== 'um' && (
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-semibold text-tinta-suave">Assinar no lugar de</span>
-              <select value={vaga} onChange={(e) => setVaga(e.target.value as Vaga)} className={`${campoCls} min-w-56`}>
-                {item.vagas.map((v) => (
-                  <option key={v} value={v}>{ROTULO_VAGA[v]}{item.ausentes.includes(v) ? ' (ausência registrada)' : ''}</option>
-                ))}
-              </select>
+          {escolhaVaga && (
+            <label className="flex min-w-56 flex-col gap-1">
+              <span className="text-xs font-semibold text-tinta-suave">{substituto ? 'Assinar no lugar de' : 'Assinar como'}</span>
+              <Escolha valor={vaga} onChange={setVaga} rotulo={substituto ? 'Assinar no lugar de' : 'Assinar como'} compacto
+                opcoes={item.vagas.map((v, n) => ({
+                  valor: v, rotulo: item.rotulos[n] || rotuloDe(v),
+                  detalhe: item.ausentes.includes(v) ? 'ausência registrada' : undefined,
+                }))} />
             </label>
-          )}
-          {item.como === 'supervisor' && s.fluxo === 'um' && (
-            <p className="w-full text-warning">Farmácia: o Supervisor assina só com o Enfermeiro e o Gerente ausentes.</p>
           )}
           {podeSozinho && (
             <label className="flex w-full items-start gap-2">
               <input type="checkbox" checked={sozinho} onChange={(e) => setSozinho(e.target.checked)} className="mt-0.5 size-4 accent-electric-cobalt" />
               <span>
-                <strong>Folga para gozo imediato:</strong> assinar sozinho(a). O {outra ? ROTULO_VAGA[outra] : 'outra chefia'} está ausente,
-                houve consenso prévio e ele(a) está ciente.
+                <strong>Folga para gozo imediato:</strong> assinar sozinho(a). {outra ? rotuloDe(outra) : 'A outra chefia'} está ausente,
+                houve consenso prévio e está ciente.
               </span>
             </label>
           )}
           {pedeMotivo && (
-            <label className="flex flex-col gap-1">
+            <label className="flex min-w-56 flex-col gap-1">
               <span className="text-xs font-semibold text-tinta-suave">Por que {ausenteDe} está ausente? *</span>
-              <select value={motivo} onChange={(e) => setMotivo(e.target.value as MotivoAusencia)} className={`${campoCls} min-w-56`}>
-                <option value="">Selecione</option>
-                {MOTIVOS_AUSENCIA.map((m) => <option key={m}>{m}</option>)}
-              </select>
+              <Escolha valor={motivo} onChange={(v) => setMotivo(v as MotivoAusencia)} rotulo="Motivo da ausência" compacto placeholder="Escolha"
+                opcoes={MOTIVOS_AUSENCIA.map((m) => ({ valor: m, rotulo: m }))} />
             </label>
           )}
-          {!pedeMotivo && (item.como === 'supervisor' || item.como === 'gerente_substituto') && (
+          {!pedeMotivo && substituto && (
             <p className="text-xs text-tinta-suave">Ausência registrada no sistema: não é preciso declarar o motivo.</p>
           )}
         </div>
       )}
       {blocoAssinatura}
       {erro && <p role="alert" className="w-full text-right text-sm text-erro">{erro}</p>}
-      <div className={comOpcoes ? 'flex flex-wrap justify-end gap-2' : 'contents'}>
+      <div className="flex flex-wrap justify-end gap-2">
         <Botao variante="secundario" onClick={() => setNegando(true)} disabled={!!ocupado}>
           <X className="size-4" aria-hidden /> Negar
         </Botao>

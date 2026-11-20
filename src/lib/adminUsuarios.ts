@@ -1,10 +1,10 @@
 import { chamarFuncao } from '@/lib/funcoes';
 import { emailDaMatricula } from '@/lib/login';
-import type { GrupoCargo, Papel } from '@/lib/types';
+import type { Papel } from '@/lib/types';
 
 /** Ações de usuário pela Edge Function "rh-usuarios" (a chave secreta fica só no Supabase) */
 export type NovoUsuario = {
-  nome: string; matricula: string; senha: string; cargo: string; papel: Papel; grupo_cargo: GrupoCargo; unidade_id: string | null;
+  nome: string; matricula: string; senha: string; cargo: string; papel: Papel; fluxo_id: string | null; unidade_id: string | null;
   /** Só para Supervisor: unidades que acompanha (gravadas depois de criar o acesso) */
   supervisiona: string[];
 };

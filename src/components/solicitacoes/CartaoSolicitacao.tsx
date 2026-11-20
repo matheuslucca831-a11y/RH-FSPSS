@@ -61,6 +61,7 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
         <div className="flex items-center gap-2">
           {s.arquivado && <Selo texto="Arquivada" />}
           <Selo texto={s.situacao} />
+          {s.situacao === 'Aprovado' && s.baixa_em && <Selo texto="Baixa no RH" tom="info" />}
           <span className="font-mono text-xs text-tinta-suave">{s.protocolo}</span>
         </div>
       </div>
@@ -140,6 +141,7 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
 
       <p className={`mt-4 rounded-xl border px-4 py-2.5 text-sm ${parou ? (s.situacao === 'Negado' ? 'border-danger/20 bg-danger-light text-danger' : 'border-linha bg-faint-gray text-slate-gray') : fim ? 'border-forest/20 bg-forest-light text-forest' : 'border-linha bg-faint-gray text-mid-graphite'}`}>
         {frase(s)}
+        {s.fluxo_nome && mostrarSolicitante && <span className="mt-0.5 block text-xs opacity-75">Fluxo: {s.fluxo_nome}</span>}
       </p>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">

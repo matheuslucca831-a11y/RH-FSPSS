@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Clock, KeyRound, MapPin, Pencil, Plus, Power, RefreshCw, Smartphone, Users, Wand2 } from 'lucide-react';
+import { CheckCheck, Clock, GitBranch, KeyRound, MapPin, Pencil, Plus, Power, RefreshCw, Smartphone, Users, Wand2, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { dataHoraBR, mensagemErro, normalizar } from '@/lib/formato';
 import { matriculaValida } from '@/lib/login';
@@ -9,27 +9,31 @@ import { problemaSenha } from '@/lib/acesso';
 import {
   criarUsuario, definirAtivo, gerarSenhaTemporaria, liberarNovoCelular, mudarMatricula, redefinirSenha, type NovoUsuario,
 } from '@/lib/adminUsuarios';
-import { GRUPOS, PAPEIS, SEM_UNIDADE, grupoDoCargo, type GrupoCargo, type Papel } from '@/lib/types';
+import { PAPEIS, SEM_UNIDADE, grupoDoCargo, type Papel } from '@/lib/types';
+import Escolha from '@/components/Escolha';
 import { iniciais } from '@/components/Shell';
 import { Aviso, Botao, Campo, CampoBusca, Selo, campoCls, inputCls } from '@/components/ui';
 import { Paginacao, usePaginacao } from '@/components/Paginacao';
 
 type Usuario = {
-  id: string; nome: string; matricula: string; email: string | null; cargo: string | null; papel: Papel; grupo_cargo: GrupoCargo;
+  id: string; nome: string; matricula: string; email: string | null; cargo: string | null; papel: Papel; fluxo_id: string | null;
   unidade_id: string | null; supervisiona: string[]; ativo: boolean; deve_trocar_senha: boolean; ultimo_acesso_em: string | null;
   unidade: { nome: string } | null;
 };
 type Unidade = { id: string; nome: string; ativa: boolean };
+type FluxoResumo = { id: string; nome: string; ativo: boolean };
 type Filtro = 'todos' | 'funcionario' | 'chefias' | 'gestao' | 'ativos' | 'inativos';
 
-const NOVO: NovoUsuario = { nome: '', matricula: '', senha: '', cargo: '', papel: 'funcionario', grupo_cargo: 'geral', unidade_id: null, supervisiona: [] };
+const NOVO: NovoUsuario = { nome: '', matricula: '', senha: '', cargo: '', papel: 'funcionario', fluxo_id: null, unidade_id: null, supervisiona: [] };
 const CARGOS = ['Agente Comunitário de Saúde', 'Auxiliar Administrativo', 'Auxiliar de Serviços Gerais', 'Recepcionista',
   'Técnico de Enfermagem', 'Auxiliar de Enfermagem', 'Enfermeiro(a)', 'Médico(a)', 'Farmacêutico(a)', 'Técnico de Farmácia',
   'Supervisor(a)', 'Assessor(a)', 'Gerente de Unidade', 'Coordenador(a) de Enfermagem', 'Gestor(a)'];
-const ORDEM_PAPEL: Papel[] = ['direcao', 'coordenacao', 'supervisor', 'gerente', 'enfermeiro', 'funcionario'];
+const ORDEM_PAPEL: Papel[] = ['direcao', 'diretor', 'rh', 'coordenacao', 'supervisor', 'gerente', 'enfermeiro', 'funcionario'];
 const BADGE: Record<Papel, string> = {
   direcao: 'border-electric-cobalt/30 bg-electric-cobalt text-white',
   coordenacao: 'border-electric-cobalt/30 bg-deep-cobalt text-white',
+  diretor: 'border-electric-cobalt/30 bg-lavender-mist text-electric-cobalt',
+  rh: 'border-forest/30 bg-forest text-white',
   supervisor: 'border-violet-200 bg-violet-50 text-violet-700',
   gerente: 'border-warning/25 bg-warning-light text-warning',
   enfermeiro: 'border-forest/20 bg-forest-light text-forest',
@@ -38,7 +42,14 @@ const BADGE: Record<Papel, string> = {
 const CHEFIAS: Papel[] = ['enfermeiro', 'gerente', 'supervisor'];
 /** Papéis que podem ter unidades vinculadas além da lotação */
 const COM_VINCULOS: Papel[] = ['enfermeiro', 'gerente', 'supervisor'];
-const GESTAO: Papel[] = ['coordenacao', 'direcao'];
+const GESTAO: Papel[] = ['coordenacao', 'diretor', 'rh', 'direcao'];
+
+/** Modelo sugerido para um cadastro novo (o equivalente à Circular 254 da Atenção Básica) */
+function sugerirFluxo(fluxos: FluxoResumo[], cargo: string, papel: Papel) {
+  const nome = ['supervisor', 'coordenacao', 'diretor', 'rh', 'direcao'].includes(papel) ? 'Gestão | Direção decide'
+    : ({ gerente: 'Atenção Básica | Gerentes', enfermeiro: 'Atenção Básica | Enfermeiros', farmacia: 'Atenção Básica | Farmácia', geral: 'Atenção Básica | Cargos gerais' })[grupoDoCargo(cargo, papel)];
+  return fluxos.find((f) => f.nome === nome && f.ativo)?.id ?? null;
+}
 
 export default function AdminUsuarios({ meuId }: { meuId: string }) {
   const supabase = useMemo(() => createClient(), []);
@@ -50,6 +61,10 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [fUnidade, setFUnidade] = useState('');
+  const [fFluxo, setFFluxo] = useState('');
+  const [fluxos, setFluxos] = useState<FluxoResumo[]>([]);
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const [fluxoLote, setFluxoLote] = useState('');
   const [novo, setNovo] = useState<NovoUsuario | null>(null);
   const [editando, setEditando] = useState<Usuario | null>(null);
   const [senha, setSenha] = useState<{ id: string; valor: string } | null>(null);
@@ -58,10 +73,11 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
   useEffect(() => {
     let vivo = true;
     Promise.all([
-      supabase.from('perfis').select('id, nome, matricula, email, cargo, papel, grupo_cargo, unidade_id, ativo, deve_trocar_senha, ultimo_acesso_em, unidade:unidades!perfis_unidade_id_fkey(nome)').order('nome'),
+      supabase.from('perfis').select('id, nome, matricula, email, cargo, papel, fluxo_id, unidade_id, ativo, deve_trocar_senha, ultimo_acesso_em, unidade:unidades!perfis_unidade_id_fkey(nome)').order('nome'),
       supabase.from('unidades').select('id, nome, ativa').order('nome'),
       supabase.from('supervisao').select('supervisor_id, unidade_id'),
-    ]).then(([p, u, sv]) => {
+      supabase.from('fluxos').select('id, nome, ativo').order('nome'),
+    ]).then(([p, u, sv, fl]) => {
       if (!vivo) return;
       const vinculos = (sv.data as { supervisor_id: string; unidade_id: string }[]) ?? [];
       const ordenada = ((p.data as unknown as Usuario[]) ?? [])
@@ -69,6 +85,7 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
         .sort((a, b) => ORDEM_PAPEL.indexOf(a.papel) - ORDEM_PAPEL.indexOf(b.papel) || a.nome.localeCompare(b.nome, 'pt-BR'));
       setLista(ordenada);
       setUnidades((u.data as Unidade[]) ?? []);
+      setFluxos((fl.data as FluxoResumo[]) ?? []);
       setErro(p.error ? mensagemErro(p.error) : null);
     });
     return () => {
@@ -90,9 +107,35 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
       (filtro === 'todos' || (filtro === 'ativos' ? u.ativo : filtro === 'inativos' ? !u.ativo
         : filtro === 'chefias' ? CHEFIAS.includes(u.papel) : filtro === 'gestao' ? GESTAO.includes(u.papel) : u.papel === filtro))
       && (!fUnidade || u.unidade_id === fUnidade || u.supervisiona.includes(fUnidade))
+      && (!fFluxo || (fFluxo === 'sem' ? !u.fluxo_id : u.fluxo_id === fFluxo))
       && (!t || normalizar(`${u.nome} ${u.matricula} ${u.cargo} ${u.unidade?.nome}`).includes(t)));
-  }, [lista, busca, filtro, fUnidade]);
+  }, [lista, busca, filtro, fUnidade, fFluxo]);
+  const nomeFluxo = (id: string | null) => fluxos.find((f) => f.id === id)?.nome;
   const pag = usePaginacao(visiveis, 25);
+
+  function alternarMarca(id: string) {
+    setMarcados((m) => { const n = new Set(m); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  const todosMarcados = visiveis.length > 0 && visiveis.every((u) => marcados.has(u.id));
+
+  /** Aplica o mesmo fluxo de assinatura a todos os marcados */
+  async function aplicarLote() {
+    const ids = [...marcados];
+    if (!ids.length) return;
+    if (!fluxoLote) return setErro('Escolha o fluxo de assinatura que vai valer para os marcados.');
+    setOcupado('lote');
+    let erroLote: string | null = null;
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await supabase.from('perfis').update({ fluxo_id: fluxoLote === 'sem' ? null : fluxoLote }).in('id', ids.slice(i, i + 200));
+      if (error) { erroLote = mensagemErro(error); break; }
+    }
+    setOcupado(null);
+    if (erroLote) return setErro(erroLote);
+    const nome = fluxoLote === 'sem' ? 'sem fluxo (só a Direção)' : nomeFluxo(fluxoLote);
+    setMarcados(new Set());
+    setFluxoLote('');
+    concluir(`Fluxo "${nome}" aplicado a ${ids.length} ${ids.length === 1 ? 'pessoa' : 'pessoas'}. Vale para os próximos pedidos; os que já foram enviados seguem o caminho de quando foram enviados.`);
+  }
 
   function concluir(msg: string) {
     setOk(msg);
@@ -137,7 +180,7 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
       if (r.erro) { setOcupado(null); return setErro(r.erro); }
     }
     const { error } = await supabase.from('perfis').update({
-      nome: editando.nome.trim(), cargo: editando.cargo?.trim() || null, papel: editando.papel, grupo_cargo: editando.grupo_cargo,
+      nome: editando.nome.trim(), cargo: editando.cargo?.trim() || null, papel: editando.papel, fluxo_id: editando.fluxo_id,
       unidade_id: editando.papel === 'direcao' || editando.papel === 'coordenacao' ? null : editando.unidade_id,
     }).eq('id', editando.id);
     if (error) { setOcupado(null); return setErro(mensagemErro(error)); }
@@ -186,8 +229,10 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
   }
 
   const unidadesAtivas = unidades.filter((u) => u.ativa);
+  const opcoesPapel = ORDEM_PAPEL.slice().reverse().map((p) => ({ valor: p, rotulo: PAPEIS[p].rotulo, detalhe: PAPEIS[p].descricao }));
+  const opcoesFluxo = fluxos.filter((f) => f.ativo).map((f) => ({ valor: f.id, rotulo: f.nome }));
   const FILTROS: [Filtro, string][] = [
-    ['todos', 'Todos'], ['funcionario', 'Funcionários'], ['chefias', 'Chefias'], ['gestao', 'Coordenação e Direção'], ['ativos', 'Ativos'], ['inativos', 'Inativos'],
+    ['todos', 'Todos'], ['funcionario', 'Funcionários'], ['chefias', 'Chefias'], ['gestao', 'Gestão e RH'], ['ativos', 'Ativos'], ['inativos', 'Inativos'],
   ];
 
   return (
@@ -223,16 +268,33 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
           ))}
         </div>
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-          <select value={fUnidade} onChange={(e) => setFUnidade(e.target.value)} aria-label="Filtrar por unidade" className={`${campoCls} max-w-56 !rounded-full`}>
-            <option value="">Todas as unidades</option>
-            {unidades.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-          </select>
+          <Escolha valor={fUnidade} onChange={setFUnidade} vazio="Todas as unidades" rotulo="Filtrar por unidade" compacto className="sm:w-56"
+            opcoes={unidades.map((u) => ({ valor: u.id, rotulo: u.nome }))} />
+          <Escolha valor={fFluxo} onChange={setFFluxo} vazio="Todos os fluxos" rotulo="Filtrar por fluxo de assinatura" compacto className="sm:w-64"
+            opcoes={[...fluxos.map((f) => ({ valor: f.id, rotulo: f.nome, detalhe: f.ativo ? undefined : 'desativado' })),
+              { valor: 'sem', rotulo: 'Sem fluxo (só a Direção)' }]} />
           <CampoBusca valor={busca} onChange={setBusca} placeholder="Nome, matrícula ou cargo" className="w-full sm:w-72" />
         </div>
       </div>
 
       {erro && <Aviso>{erro}</Aviso>}
       {ok && <Aviso tom="info">{ok}</Aviso>}
+
+      {lista && visiveis.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <button type="button"
+            onClick={() => setMarcados((m) => {
+              const n = new Set(m);
+              if (todosMarcados) visiveis.forEach((u) => n.delete(u.id)); else visiveis.forEach((u) => n.add(u.id));
+              return n;
+            })}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-electric-cobalt/30 bg-white px-4 text-xs font-semibold text-electric-cobalt hover:bg-lavender-mist">
+            <CheckCheck className="size-4" aria-hidden />
+            {todosMarcados ? 'Desmarcar os filtrados' : `Marcar os ${visiveis.length} filtrados`}
+          </button>
+          <span className="text-xs text-tinta-suave">Marque várias pessoas para aplicar o mesmo fluxo de assinatura de uma vez. Use os filtros para achar o grupo.</span>
+        </div>
+      )}
 
       {novo && (
         <div className="dock-card border-2 !border-electric-cobalt/30 bg-powder-blue/10 p-5">
@@ -253,24 +315,20 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
               </div>
             </Campo>
             <Campo rotulo="Cargo"><input list="cargos" value={novo.cargo} maxLength={120} className={inputCls}
-              onChange={(e) => setNovo({ ...novo, cargo: e.target.value, grupo_cargo: grupoDoCargo(e.target.value, novo.papel) })} /></Campo>
+              onChange={(e) => setNovo({ ...novo, cargo: e.target.value, fluxo_id: sugerirFluxo(fluxos, e.target.value, novo.papel) })} /></Campo>
             <Campo rotulo="Tipo de acesso" dica={PAPEIS[novo.papel].descricao}>
-              <select value={novo.papel} className={inputCls}
-                onChange={(e) => { const papel = e.target.value as Papel; setNovo({ ...novo, papel, grupo_cargo: grupoDoCargo(novo.cargo, papel) }); }}>
-                {ORDEM_PAPEL.slice().reverse().map((p) => <option key={p} value={p}>{PAPEIS[p].rotulo}</option>)}
-              </select>
+              <Escolha valor={novo.papel} rotulo="Tipo de acesso" opcoes={opcoesPapel}
+                onChange={(v) => { const papel = v as Papel; setNovo({ ...novo, papel, fluxo_id: sugerirFluxo(fluxos, novo.cargo, papel) }); }} />
             </Campo>
-            <Campo rotulo="Quem assina os pedidos dele(a)" dica={GRUPOS[novo.grupo_cargo].descricao}>
-              <select value={novo.grupo_cargo} onChange={(e) => setNovo({ ...novo, grupo_cargo: e.target.value as GrupoCargo })} className={inputCls}>
-                {(Object.keys(GRUPOS) as GrupoCargo[]).map((g) => <option key={g} value={g}>{GRUPOS[g].rotulo}</option>)}
-              </select>
+            <Campo rotulo="Quem assina os pedidos dele(a)" dica="Fluxo de assinatura. Dá para mudar depois, inclusive de vários de uma vez.">
+              <Escolha valor={novo.fluxo_id ?? ''} onChange={(v) => setNovo({ ...novo, fluxo_id: v || null })} rotulo="Fluxo de assinatura"
+                vazio="Sem fluxo (só a Direção)" opcoes={opcoesFluxo} />
             </Campo>
             {novo.papel !== 'direcao' && novo.papel !== 'coordenacao' && (
-              <Campo rotulo={novo.papel === 'supervisor' ? 'Lotação (opcional)' : 'Unidade *'}>
-                <select value={novo.unidade_id ?? ''} onChange={(e) => setNovo({ ...novo, unidade_id: e.target.value || null })} className={inputCls}>
-                  <option value="">{novo.papel === 'supervisor' ? 'Sede' : 'Selecione'}</option>
-                  {unidadesAtivas.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
-                </select>
+              <Campo rotulo={SEM_UNIDADE.includes(novo.papel) ? 'Lotação (opcional)' : 'Unidade *'}>
+                <Escolha valor={novo.unidade_id ?? ''} onChange={(v) => setNovo({ ...novo, unidade_id: v || null })} rotulo="Unidade"
+                  placeholder="Digite o nome da unidade" vazio={SEM_UNIDADE.includes(novo.papel) ? 'Sede' : undefined}
+                  opcoes={unidadesAtivas.map((x) => ({ valor: x.id, rotulo: x.nome }))} />
               </Campo>
             )}
             {COM_VINCULOS.includes(novo.papel) && (
@@ -298,7 +356,11 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
             const sn = senha?.id === u.id ? senha : null;
             return (
               <div key={u.id} className={`dock-card flex flex-col justify-between gap-4 p-4 transition-all hover:border-electric-cobalt/40 sm:p-5 lg:flex-row lg:items-start ${u.ativo ? '' : 'opacity-75'}`}>
-                <div className="flex min-w-0 flex-1 items-start gap-4">
+                <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
+                  <label className="-m-2 flex shrink-0 cursor-pointer items-center p-2" title="Marcar para mudar o fluxo de vários">
+                    <input type="checkbox" checked={marcados.has(u.id)} onChange={() => alternarMarca(u.id)}
+                      aria-label={`Marcar ${u.nome}`} className="size-5 accent-electric-cobalt" />
+                  </label>
                   <div className="flex size-11 shrink-0 items-center justify-center rounded-full border border-electric-cobalt/25 bg-powder-blue/30 text-sm font-extrabold text-electric-cobalt shadow-xs">
                     {iniciais(u.nome)}
                   </div>
@@ -312,7 +374,9 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-gray">
                       <span className="font-mono text-mid-graphite">Matrícula: {u.matricula}</span>
                       {u.cargo && <span>{u.cargo}</span>}
-                      <span title={GRUPOS[u.grupo_cargo]?.descricao}>Assinaturas: {GRUPOS[u.grupo_cargo]?.rotulo ?? 'Cargos gerais'}</span>
+                      <span className="inline-flex items-center gap-1"><GitBranch className="size-3" aria-hidden />
+                        Fluxo: {nomeFluxo(u.fluxo_id) ?? 'só a Direção'}
+                      </span>
                       <span className="inline-flex items-center gap-1"><Clock className="size-3" aria-hidden />
                         {u.ultimo_acesso_em ? `Último acesso: ${dataHoraBR(u.ultimo_acesso_em)}` : 'Nunca entrou'}
                       </span>
@@ -338,21 +402,18 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
                           <Campo rotulo="Matrícula"><input value={ed.matricula} maxLength={40} onChange={(e) => setEditando({ ...ed, matricula: e.target.value })} className={inputCls} /></Campo>
                           <Campo rotulo="Cargo"><input list="cargos" value={ed.cargo ?? ''} maxLength={120} onChange={(e) => setEditando({ ...ed, cargo: e.target.value })} className={inputCls} /></Campo>
                           <Campo rotulo="Acesso">
-                            <select value={ed.papel} disabled={u.id === meuId} onChange={(e) => setEditando({ ...ed, papel: e.target.value as Papel })} className={inputCls}>
-                              {ORDEM_PAPEL.slice().reverse().map((p) => <option key={p} value={p}>{PAPEIS[p].rotulo}</option>)}
-                            </select>
+                            <Escolha valor={ed.papel} desabilitado={u.id === meuId} rotulo="Acesso" opcoes={opcoesPapel}
+                              onChange={(v) => setEditando({ ...ed, papel: v as Papel })} />
                           </Campo>
                           <Campo rotulo="Quem assina os pedidos">
-                            <select value={ed.grupo_cargo} onChange={(e) => setEditando({ ...ed, grupo_cargo: e.target.value as GrupoCargo })} className={inputCls}>
-                              {(Object.keys(GRUPOS) as GrupoCargo[]).map((g) => <option key={g} value={g}>{GRUPOS[g].rotulo}</option>)}
-                            </select>
+                            <Escolha valor={ed.fluxo_id ?? ''} onChange={(v) => setEditando({ ...ed, fluxo_id: v || null })} rotulo="Fluxo de assinatura"
+                              vazio="Sem fluxo (só a Direção)" opcoes={opcoesFluxo} />
                           </Campo>
                           {ed.papel !== 'direcao' && ed.papel !== 'coordenacao' && (
-                            <Campo rotulo={ed.papel === 'supervisor' ? 'Lotação' : 'Unidade'}>
-                              <select value={ed.unidade_id ?? ''} onChange={(e) => setEditando({ ...ed, unidade_id: e.target.value || null })} className={inputCls}>
-                                <option value="">{ed.papel === 'supervisor' ? 'Sede' : 'Selecione'}</option>
-                                {unidadesAtivas.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
-                              </select>
+                            <Campo rotulo={SEM_UNIDADE.includes(ed.papel) ? 'Lotação' : 'Unidade'}>
+                              <Escolha valor={ed.unidade_id ?? ''} onChange={(v) => setEditando({ ...ed, unidade_id: v || null })} rotulo="Unidade"
+                                placeholder="Digite o nome da unidade" vazio={SEM_UNIDADE.includes(ed.papel) ? 'Sede' : undefined}
+                                opcoes={unidadesAtivas.map((x) => ({ valor: x.id, rotulo: x.nome }))} />
                             </Campo>
                           )}
                         </div>
@@ -397,6 +458,30 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
             );
           })}
           <Paginacao p={pag} rotulo="usuários" />
+        </div>
+      )}
+
+      {marcados.size > 0 && <div className="h-40 lg:h-24" aria-hidden />}
+      {marcados.size > 0 && (
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 px-3 pb-2 lg:bottom-4 lg:left-72 lg:px-8">
+          <div className="mx-auto max-w-3xl rounded-2xl border border-electric-cobalt/30 bg-white p-3 shadow-xl sm:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-bold text-ink-charcoal">
+                {marcados.size} {marcados.size === 1 ? 'pessoa marcada' : 'pessoas marcadas'}
+              </p>
+              <button type="button" onClick={() => setMarcados(new Set())} aria-label="Desmarcar todos"
+                className="inline-flex size-9 items-center justify-center rounded-full text-slate-gray hover:bg-faint-gray">
+                <X className="size-4" aria-hidden />
+              </button>
+            </div>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <Escolha valor={fluxoLote} onChange={setFluxoLote} rotulo="Fluxo para os marcados" placeholder="Escolha o fluxo de assinatura"
+                className="flex-1" opcoes={[...opcoesFluxo, { valor: 'sem', rotulo: 'Sem fluxo (só a Direção)' }]} />
+              <Botao carregando={ocupado === 'lote'} onClick={aplicarLote}>
+                <GitBranch className="size-4" aria-hidden /> Aplicar a {marcados.size}
+              </Botao>
+            </div>
+          </div>
         </div>
       )}
     </div>

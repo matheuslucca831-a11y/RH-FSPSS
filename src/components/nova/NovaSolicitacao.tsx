@@ -9,13 +9,14 @@ import { createClient } from '@/lib/supabase/client';
 import { hojeISO, mensagemErro } from '@/lib/formato';
 import { limparCacheTelas } from '@/lib/cacheTela';
 import {
-  ANEXO_MAX_MB, ANEXO_TIPOS, CATEGORIAS, SUBTIPOS_ATESTADO, anexoObrigatorio, etapasUnidade, nomeArquivoSeguro, pedeHorarios, periodo,
-  rota, rotuloTipo, umDia, type Categoria,
+  ANEXO_MAX_MB, ANEXO_TIPOS, CATEGORIAS, SUBTIPOS_ATESTADO, anexoObrigatorio, nomeArquivoSeguro, pedeHorarios, periodo,
+  quemAssina, rotuloTipo, rotuloVaga, umDia, type Categoria, type Etapa,
 } from '@/lib/solicitacoes';
 import { dataBR } from '@/lib/formato';
 import type { Perfil } from '@/lib/types';
 import CampoAssinatura, { autorizarComSenha } from '@/components/assinatura/CampoAssinatura';
 import { Aviso, Botao, Cabecalho, Campo, inputCls } from '@/components/ui';
+import Escolha from '@/components/Escolha';
 
 type Form = {
   categoria: Categoria; tipo: string; subtipo: string;
@@ -67,6 +68,16 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
   const inputArquivo = useRef<HTMLInputElement>(null);
   const [aprovadas, setAprovadas] = useState<Aprovada[] | null>(null);
   const [destinos, setDestinos] = useState<{ id: string; nome: string }[]>([]);
+  const [rotas, setRotas] = useState<Partial<Record<Categoria, Etapa[]>>>({});
+
+  // Caminho das assinaturas deste tipo de pedido (o fluxo configurado para você)
+  useEffect(() => {
+    if (rotas[f.categoria]) return;
+    let vivo = true;
+    supabase.rpc('minha_rota', { p_categoria: f.categoria })
+      .then(({ data }) => vivo && setRotas((r) => ({ ...r, [f.categoria]: (data as Etapa[] | null) ?? [] })));
+    return () => { vivo = false; };
+  }, [f.categoria, rotas, supabase]);
 
   // Para cancelamento: folgas e férias suas já aprovadas. Para transferência: as unidades ativas.
   useEffect(() => {
@@ -103,16 +114,10 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
     setArquivo(a);
   }
 
-  /** Etapas que este pedido vai percorrer (Circular 254/2026: conforme o seu cargo e o tipo do pedido) */
-  const r = rota(perfil.papel, perfil.grupo_cargo ?? 'geral', f.categoria);
-  const podeGozoImediato = f.categoria === 'folga' && r.fluxo === 'ambos' && r.vagas.length === 2;
-  const etapas = [
-    'Você envia',
-    ...etapasUnidade(r.fluxo, r.vagas),
-    ...(r.coordenacao ? [f.categoria === 'transferencia' ? 'Coordenação de Referência / Direção avalia' : 'Coordenação de Enfermagem avalia'] : []),
-    ...(r.direcao ? ['Direção dá a decisão final'] : []),
-    'Pronto: você acompanha em Minhas solicitações',
-  ];
+  /** Etapas que este pedido vai percorrer (o fluxo de assinatura configurado para você) */
+  const caminho = rotas[f.categoria];
+  const podeGozoImediato = f.categoria === 'folga' && !!caminho?.some((e) => e.gozo_imediato && e.regra === 'todos' && e.vagas.length === 2);
+  const substitutos = (caminho ?? []).filter((e) => e.substituto);
   const referencia = aprovadas?.find((a) => a.id === f.referencia_id);
   const umaData = umDia(f.categoria);
   const justificativaObrigatoria = f.tipo === 'Outros' || ['saida', 'estagio', 'transferencia'].includes(f.categoria);
@@ -199,9 +204,7 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
           <h1 className="mt-4 text-2xl font-bold tracking-tight">Solicitação enviada</h1>
           <p className="mt-1 text-tinta-suave">
             Protocolo <span className="font-mono font-semibold text-tinta">{feito.protocolo}</span>. Agora ela está
-            {feito.situacao === 'Aguardando chefia' ? ' aguardando a assinatura da chefia da sua unidade.'
-              : feito.situacao === 'Aguardando coordenação' ? (f.categoria === 'transferencia' ? ' com a Coordenação / Direção.' : ' com a Coordenação de Enfermagem.')
-              : ' com a Direção.'}
+            {caminho?.[0] ? ` aguardando: ${caminho[0].nome} (${quemAssina(caminho[0])}).` : ' aguardando a assinatura.'}
           </p>
           <div className="mt-6 flex flex-wrap gap-2">
             <Link href="/minhas" className="dock-btn-primary">
@@ -247,16 +250,14 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
           {CATEGORIAS[f.categoria].tipos.length > 1 && f.categoria !== 'cancelamento' && (
             <div className="grid gap-4 sm:grid-cols-2">
               <Campo rotulo={f.categoria === 'folga' ? 'Folga referente a *' : 'Tipo de ocorrência *'}>
-                <select value={f.tipo} onChange={(e) => { set('tipo', e.target.value); set('subtipo', ''); }} className={inputCls}>
-                  {CATEGORIAS[f.categoria].tipos.map((t) => <option key={t}>{t}</option>)}
-                </select>
+                <Escolha valor={f.tipo} onChange={(v) => { set('tipo', v); set('subtipo', ''); }}
+                  rotulo={f.categoria === 'folga' ? 'Folga referente a' : 'Tipo de ocorrência'}
+                  opcoes={CATEGORIAS[f.categoria].tipos.map((t) => ({ valor: t, rotulo: t }))} />
               </Campo>
               {f.tipo === 'Atestado' && (
                 <Campo rotulo="Tipo de atestado *">
-                  <select value={f.subtipo} onChange={(e) => set('subtipo', e.target.value)} className={inputCls}>
-                    <option value="">Selecione</option>
-                    {SUBTIPOS_ATESTADO.map((t) => <option key={t}>{t}</option>)}
-                  </select>
+                  <Escolha valor={f.subtipo} onChange={(v) => set('subtipo', v)} rotulo="Tipo de atestado" placeholder="Escolha"
+                    opcoes={SUBTIPOS_ATESTADO.map((t) => ({ valor: t, rotulo: t }))} />
                 </Campo>
               )}
             </div>
@@ -264,23 +265,18 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
 
           {f.categoria === 'cancelamento' ? (
             <Campo rotulo="Folga ou férias a cancelar *" dica="Só aparecem pedidos seus já aprovados. Se ainda estiver em análise, cancele em Minhas solicitações.">
-              <select value={f.referencia_id} onChange={(e) => set('referencia_id', e.target.value)} className={inputCls}>
-                <option value="">{aprovadas === null ? 'Carregando…' : aprovadas.length ? 'Selecione' : 'Nenhuma folga ou férias aprovada'}</option>
-                {(aprovadas ?? []).map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.protocolo} | {CATEGORIAS[a.categoria].titulo}: {rotuloTipo(a)} | {periodo(a)}
-                  </option>
-                ))}
-              </select>
+              <Escolha valor={f.referencia_id} onChange={(v) => set('referencia_id', v)} rotulo="Folga ou férias a cancelar"
+                placeholder={aprovadas === null ? 'Carregando…' : aprovadas.length ? 'Digite o protocolo ou a data' : 'Nenhuma folga ou férias aprovada'}
+                opcoes={(aprovadas ?? []).map((a) => ({
+                  valor: a.id, rotulo: `${a.protocolo} | ${CATEGORIAS[a.categoria].titulo}`, detalhe: `${rotuloTipo(a)} | ${periodo(a)}`,
+                }))} />
             </Campo>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               {f.categoria === 'transferencia' && (
                 <Campo rotulo="Unidade de destino *">
-                  <select value={f.unidade_destino_id} onChange={(e) => set('unidade_destino_id', e.target.value)} className={inputCls}>
-                    <option value="">Selecione</option>
-                    {destinos.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-                  </select>
+                  <Escolha valor={f.unidade_destino_id} onChange={(v) => set('unidade_destino_id', v)} rotulo="Unidade de destino"
+                    placeholder="Digite o nome da unidade" opcoes={destinos.map((u) => ({ valor: u.id, rotulo: u.nome }))} />
                 </Campo>
               )}
               <Campo rotulo={f.categoria === 'transferencia' ? 'A partir de *' : umaData ? 'Data *' : 'Data inicial *'}>
@@ -373,21 +369,27 @@ export default function NovaSolicitacao({ perfil, categoriaInicial = 'ponto' }: 
 
         <aside className="dock-card h-fit p-5 sm:p-6">
           <h2 className="text-sm font-bold">Como este pedido vai andar</h2>
-          <ol className="mt-3 space-y-3">
-            {etapas.map((t, i) => (
-              <li key={t} className="flex gap-3 text-sm">
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-lavender-mist text-xs font-bold text-electric-cobalt">{i + 1}</span>
-                <span className="pt-0.5">{t}</span>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-4 text-xs text-tinta-suave">
-            {r.fluxo === 'direcao' ? 'Seu pedido vai direto à Direção: ninguém assina o próprio pedido.'
-              : r.fluxo === 'um' ? 'Farmácia: basta uma chefia (Circular 254/2026). Avise antes o Enfermeiro ou o Gerente sobre a ausência.'
-              : r.fluxo === 'ambos' && r.vagas.length === 2 ? 'Na ausência do Enfermeiro ou do Gerente (férias ou afastamento médico), o Supervisor assina no lugar.'
-              : r.fluxo === 'saida_estagio' ? 'Com Enfermeiro e Gerente ausentes, o pedido aguarda o retorno das chefias.'
-              : r.vagas[0] === 'gerente' ? 'Na ausência do Gerente, o Supervisor assina no lugar.' : 'Conforme a Circular nº 254/2026.'}
-          </p>
+          {!caminho ? (
+            <p className="mt-3 text-sm text-tinta-suave">Carregando…</p>
+          ) : (
+            <ol className="mt-3 space-y-3">
+              {[{ t: 'Você envia', d: '' }, ...caminho.map((e) => ({ t: e.nome, d: quemAssina(e) })),
+                { t: 'Pronto: você acompanha em Minhas solicitações', d: '' }].map((x, i) => (
+                <li key={`${x.t}-${i}`} className="flex gap-3 text-sm">
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-lavender-mist text-xs font-bold text-electric-cobalt">{i + 1}</span>
+                  <span className="pt-0.5">
+                    <span className="block">{x.t}</span>
+                    {x.d && x.d !== x.t && <span className="block text-xs text-tinta-suave">{x.d}</span>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+          {substitutos.length > 0 && (
+            <p className="mt-4 text-xs text-tinta-suave">
+              Na ausência (férias ou afastamento médico): {substitutos.map((e) => `${rotuloVaga(e.substituto!)} assina em "${e.nome}"`).join('; ')}.
+            </p>
+          )}
         </aside>
       </div>
     </form>

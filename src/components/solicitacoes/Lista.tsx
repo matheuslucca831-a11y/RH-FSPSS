@@ -7,6 +7,7 @@ import { CATEGORIAS, type Categoria, type Solicitacao } from '@/lib/solicitacoes
 import { CampoBusca, campoCls, Vazio } from '@/components/ui';
 import { Paginacao, usePaginacao } from '@/components/Paginacao';
 import CartaoSolicitacao from './CartaoSolicitacao';
+import Escolha from '@/components/Escolha';
 
 type Props = {
   itens: Solicitacao[] | undefined;
@@ -47,15 +48,11 @@ export default function ListaSolicitacoes({ itens, mostrarSolicitante, acoes, de
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <CampoBusca valor={busca} onChange={setBusca} className="w-full min-w-56 flex-1 sm:w-auto"
           placeholder={mostrarSolicitante ? 'Buscar nome, matrícula ou protocolo' : 'Buscar protocolo ou tipo'} />
-        <select value={cat} onChange={(e) => setCat(e.target.value as Categoria | '')} aria-label="Tipo de pedido" className={`${campoCls} flex-1 sm:flex-none`}>
-          <option value="">Todos os tipos</option>
-          {(Object.keys(CATEGORIAS) as Categoria[]).map((c) => <option key={c} value={c}>{CATEGORIAS[c].titulo}</option>)}
-        </select>
+        <Escolha valor={cat} onChange={(v) => setCat(v as Categoria | '')} vazio="Todos os tipos" rotulo="Tipo de pedido" compacto
+          className="min-w-44 flex-1 sm:w-56 sm:flex-none" opcoes={(Object.keys(CATEGORIAS) as Categoria[]).map((c) => ({ valor: c, rotulo: CATEGORIAS[c].titulo }))} />
         {comUnidade && unidades.length > 1 && (
-          <select value={unidade} onChange={(e) => setUnidade(e.target.value)} aria-label="Unidade" className={`${campoCls} flex-1 sm:max-w-64 sm:flex-none`}>
-            <option value="">Todas as unidades</option>
-            {unidades.map((u) => <option key={u}>{u}</option>)}
-          </select>
+          <Escolha valor={unidade} onChange={setUnidade} vazio="Todas as unidades" rotulo="Unidade" compacto placeholder="Digite a unidade"
+            className="min-w-44 flex-1 sm:w-64 sm:flex-none" opcoes={unidades.map((u) => ({ valor: u, rotulo: u }))} />
         )}
       </div>
 

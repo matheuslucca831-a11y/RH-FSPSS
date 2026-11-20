@@ -9,7 +9,7 @@ import { buscarSolicitacoes } from '@/lib/consultas';
 import { normalizar } from '@/lib/formato';
 import { baixarCSV } from '@/lib/csv';
 import {
-  CATEGORIAS, ROTULO_VAGA, SITUACOES, dataCurta, periodo, rotuloTipo, type Categoria, type ItemFila, type Situacao, type Solicitacao,
+  CATEGORIAS, SITUACOES, rotuloEtapa, dataCurta, periodo, rotuloTipo, type Categoria, type ItemFila, type Situacao, type Solicitacao,
 } from '@/lib/solicitacoes';
 import { Aviso, Botao, Cabecalho, CampoBusca, Campo, Selo, TabelaWrap, inputCls, tdCls, thCls } from '@/components/ui';
 import { Paginacao, usePaginacao } from '@/components/Paginacao';
@@ -17,6 +17,7 @@ import CartaoSolicitacao from '@/components/solicitacoes/CartaoSolicitacao';
 import { AcaoArquivar, AcaoExcluir, AcoesAssinatura } from '@/components/solicitacoes/Acoes';
 import { buscarFila } from '@/lib/fila';
 import { usePerfil } from '@/lib/contextoPerfil';
+import Escolha from '@/components/Escolha';
 
 /** Direção e Coordenação: tabela de todas as solicitações (ou do arquivo) com filtros */
 export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usuarioId: string; arquivo?: boolean }) {
@@ -71,7 +72,7 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
         'Assinaturas', 'Enviado em'],
       visiveis.map((s) => [s.protocolo, s.solicitante_nome, s.solicitante_matricula, s.solicitante_cargo, s.unidade_nome,
         CATEGORIAS[s.categoria].titulo, rotuloTipo(s), s.data_inicio, s.data_fim, s.situacao,
-        (s.assinaturas ?? []).map((a) => `${ROTULO_VAGA[a.etapa] ?? a.etapa}: ${a.nome} (${a.decisao}${a.substituicao ? `; ${a.substituicao}` : ''})`).join(' | '),
+        (s.assinaturas ?? []).map((a) => `${rotuloEtapa(a.etapa)}: ${a.nome} (${a.decisao}${a.substituicao ? `; ${a.substituicao}` : ''})`).join(' | '),
         dataCurta(s.criado_em)]));
   }
 
@@ -101,22 +102,16 @@ export default function TodasSolicitacoes({ usuarioId, arquivo = false }: { usua
         </Campo>
         <div className={`${verFiltros ? 'contents' : 'hidden'} sm:contents`}>
         <Campo rotulo="Situação">
-          <select value={situacao} onChange={(e) => setSituacao(e.target.value as Situacao | '')} className={inputCls}>
-            <option value="">Todas</option>
-            {SITUACOES.filter((x) => !arquivo || !x.startsWith('Aguardando')).map((x) => <option key={x}>{x}</option>)}
-          </select>
+          <Escolha valor={situacao} onChange={(v) => setSituacao(v as Situacao | '')} vazio="Todas" rotulo="Situação"
+            opcoes={SITUACOES.filter((x) => !arquivo || !x.startsWith('Aguardando')).map((x) => ({ valor: x, rotulo: x }))} />
         </Campo>
         <Campo rotulo="Pedido">
-          <select value={cat} onChange={(e) => setCat(e.target.value as Categoria | '')} className={inputCls}>
-            <option value="">Todos</option>
-            {(Object.keys(CATEGORIAS) as Categoria[]).map((c) => <option key={c} value={c}>{CATEGORIAS[c].titulo}</option>)}
-          </select>
+          <Escolha valor={cat} onChange={(v) => setCat(v as Categoria | '')} vazio="Todos" rotulo="Pedido"
+            opcoes={(Object.keys(CATEGORIAS) as Categoria[]).map((c) => ({ valor: c, rotulo: CATEGORIAS[c].titulo }))} />
         </Campo>
         <Campo rotulo="Unidade" className="lg:col-span-2">
-          <select value={unidade} onChange={(e) => setUnidade(e.target.value)} className={inputCls}>
-            <option value="">Todas</option>
-            {unidades.map((u) => <option key={u}>{u}</option>)}
-          </select>
+          <Escolha valor={unidade} onChange={setUnidade} vazio="Todas" rotulo="Unidade" placeholder="Digite a unidade"
+            opcoes={unidades.map((u) => ({ valor: u, rotulo: u }))} />
         </Campo>
         <div className="grid grid-cols-2 gap-2 lg:col-span-2">
           <Campo rotulo="De"><input type="date" value={de} onChange={(e) => setDe(e.target.value)} className={inputCls} /></Campo>

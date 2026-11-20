@@ -37,13 +37,14 @@ export function Paginacao({ p, rotulo = 'registros' }: { p: Pag; rotulo?: string
         Mostrando {p.inicio + 1}–{Math.min(p.inicio + p.porPagina, p.total)} de {p.total} {rotulo}
       </span>
       <div className="flex items-center gap-2">
-        <label className="flex items-center gap-1.5 text-tinta-suave">
-          Por página
-          <select value={p.porPagina} onChange={(e) => p.mudarTamanho(Number(e.target.value))}
-            className="rounded-full border border-linha bg-white px-3 py-1.5 text-sm text-tinta">
-            {TAMANHOS.map((n) => <option key={n}>{n}</option>)}
-          </select>
-        </label>
+        <div className="flex items-center gap-1 text-tinta-suave" role="group" aria-label="Itens por página">
+          <span className="hidden sm:inline">Por página</span>
+          {TAMANHOS.map((n) => (
+            <button key={n} type="button" aria-pressed={p.porPagina === n} onClick={() => p.mudarTamanho(n)}
+              className={`min-h-[32px] min-w-9 rounded-full px-2 text-xs font-semibold ${
+                p.porPagina === n ? 'bg-electric-cobalt text-white' : 'border border-linha bg-white text-tinta'}`}>{n}</button>
+          ))}
+        </div>
         <button type="button" className={btn} disabled={p.pagina <= 1} onClick={() => p.irPara(p.pagina - 1)} aria-label="Página anterior">
           <ChevronLeft className="size-4" />
         </button>

@@ -1,5 +1,5 @@
 /** O que a pessoa faz no sistema (quem assina) */
-export type Papel = 'funcionario' | 'enfermeiro' | 'gerente' | 'supervisor' | 'coordenacao' | 'direcao';
+export type Papel = 'funcionario' | 'enfermeiro' | 'gerente' | 'supervisor' | 'coordenacao' | 'diretor' | 'rh' | 'direcao';
 
 /** Grupo do cargo de quem pede: decide quem assina (Circular 254/2026) */
 export type GrupoCargo = 'geral' | 'farmacia' | 'enfermeiro' | 'gerente';
@@ -12,6 +12,8 @@ export type Perfil = {
   cargo: string | null;
   papel: Papel;
   grupo_cargo?: GrupoCargo;
+  /** Modelo de fluxo de assinatura que vale para os pedidos desta pessoa */
+  fluxo_id?: string | null;
   unidade_id: string | null;
   ativo: boolean;
   unidade: { nome: string; sigla: string | null } | null;
@@ -25,7 +27,9 @@ export const PAPEIS: Record<Papel, { rotulo: string; descricao: string }> = {
   gerente: { rotulo: 'Gerente da unidade', descricao: 'Assina os pedidos da unidade (cargos gerais e enfermeiros).' },
   supervisor: { rotulo: 'Supervisor', descricao: 'Assina no lugar do Enfermeiro ou do Gerente em férias ou afastamento médico.' },
   coordenacao: { rotulo: 'Coordenação de Enfermagem', descricao: 'Avalia os pedidos dos Gerentes e as transferências de lotação.' },
-  direcao: { rotulo: 'Direção', descricao: 'Decisão final de folgas, férias e cancelamentos; relatórios e cadastros.' },
+  diretor: { rotulo: 'Diretor(a) de área', descricao: 'Assina os pedidos dos fluxos em que aparece, sem administrar o sistema.' },
+  rh: { rotulo: 'RH', descricao: 'Vê os pedidos e dá baixa nos aprovados.' },
+  direcao: { rotulo: 'Direção', descricao: 'Administra o sistema: cadastros, fluxos de assinatura e relatórios. Pode decidir direto.' },
 };
 
 export const GRUPOS: Record<GrupoCargo, { rotulo: string; descricao: string }> = {
@@ -45,6 +49,6 @@ export function grupoDoCargo(cargo: string, papel: Papel): GrupoCargo {
 }
 
 /** Papéis que assinam pedidos */
-export const ASSINAM: Papel[] = ['enfermeiro', 'gerente', 'supervisor', 'coordenacao', 'direcao'];
+export const ASSINAM: Papel[] = ['enfermeiro', 'gerente', 'supervisor', 'coordenacao', 'diretor', 'direcao'];
 /** Papéis sem unidade obrigatória */
-export const SEM_UNIDADE: Papel[] = ['supervisor', 'coordenacao', 'direcao'];
+export const SEM_UNIDADE: Papel[] = ['supervisor', 'coordenacao', 'diretor', 'rh', 'direcao'];

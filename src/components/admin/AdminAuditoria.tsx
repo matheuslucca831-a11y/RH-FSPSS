@@ -10,6 +10,7 @@ import { dataHoraBR, hojeISO, normalizar, somarDias } from '@/lib/formato';
 import { baixarCSV } from '@/lib/csv';
 import { Aviso, Botao, Campo, CampoBusca, TabelaWrap, inputCls, tdCls, thCls } from '@/components/ui';
 import { Paginacao, usePaginacao } from '@/components/Paginacao';
+import Escolha from '@/components/Escolha';
 
 type Registro = {
   id: number; criado_em: string; usuario_nome: string | null; acao: string; alvo_tipo: string | null; alvo_nome: string | null;
@@ -95,10 +96,8 @@ export default function AdminAuditoria() {
       <div className="dock-card grid gap-3 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-6">
         <Campo rotulo="Buscar" className="sm:col-span-2"><CampoBusca valor={busca} onChange={setBusca} placeholder="Pessoa, ação ou detalhe" /></Campo>
         <Campo rotulo="Ação" className="lg:col-span-2">
-          <select value={acao} onChange={(e) => setAcao(e.target.value)} className={inputCls}>
-            <option value="">Todas</option>
-            {acoes.map((a) => <option key={a}>{a}</option>)}
-          </select>
+          <Escolha valor={acao} onChange={setAcao} vazio="Todas" rotulo="Ação" placeholder="Digite a ação"
+            opcoes={acoes.map((a) => ({ valor: a, rotulo: a }))} />
         </Campo>
         <Campo rotulo="De"><input type="date" value={de} max={ate} onChange={(e) => setDe(e.target.value || de)} className={inputCls} /></Campo>
         <Campo rotulo="Até"><input type="date" value={ate} min={de} onChange={(e) => setAte(e.target.value || ate)} className={inputCls} /></Campo>
