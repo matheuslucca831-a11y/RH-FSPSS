@@ -57,7 +57,16 @@ export default function Escolha({
   useEffect(() => {
     if (!aberto || !caixa.current) return;
     const r = caixa.current.getBoundingClientRect();
-    setParaCima(window.innerHeight - r.bottom < 280 && r.top > window.innerHeight - r.bottom);
+    // limite: a área com rolagem mais próxima (ex.: uma janela) ou a tela
+    let topo = 0; let base = window.innerHeight;
+    for (let el = caixa.current.parentElement; el; el = el.parentElement) {
+      const o = getComputedStyle(el).overflowY;
+      if (o === 'auto' || o === 'scroll' || o === 'hidden') {
+        const b = el.getBoundingClientRect(); topo = Math.max(0, b.top); base = Math.min(base, b.bottom); break;
+      }
+    }
+    const abaixo = base - r.bottom; const acima = r.top - topo;
+    setParaCima(abaixo < 280 && acima > abaixo);
   }, [aberto]);
 
   // Fecha ao tocar fora

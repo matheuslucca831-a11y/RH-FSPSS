@@ -9,8 +9,9 @@ import { problemaSenha } from '@/lib/acesso';
 import {
   criarUsuario, definirAtivo, gerarSenhaTemporaria, liberarNovoCelular, mudarMatricula, redefinirSenha, type NovoUsuario,
 } from '@/lib/adminUsuarios';
-import { PAPEIS, SEM_UNIDADE, grupoDoCargo, type Papel } from '@/lib/types';
+import { PAPEIS, SEM_UNIDADE, type Papel } from '@/lib/types';
 import Escolha from '@/components/Escolha';
+import Janela from '@/components/Janela';
 import { iniciais } from '@/components/Shell';
 import { Aviso, Botao, Campo, CampoBusca, Selo, campoCls, inputCls } from '@/components/ui';
 import { Paginacao, usePaginacao } from '@/components/Paginacao';
@@ -44,11 +45,18 @@ const CHEFIAS: Papel[] = ['enfermeiro', 'gerente', 'supervisor'];
 const COM_VINCULOS: Papel[] = ['enfermeiro', 'gerente', 'supervisor'];
 const GESTAO: Papel[] = ['coordenacao', 'diretor', 'rh', 'direcao'];
 
-/** Modelo sugerido para um cadastro novo (o equivalente à Circular 254 da Atenção Básica) */
-function sugerirFluxo(fluxos: FluxoResumo[], cargo: string, papel: Papel) {
-  const nome = ['supervisor', 'coordenacao', 'diretor', 'rh', 'direcao'].includes(papel) ? 'Gestão | Direção decide'
-    : ({ gerente: 'Atenção Básica | Gerentes', enfermeiro: 'Atenção Básica | Enfermeiros', farmacia: 'Atenção Básica | Farmácia', geral: 'Atenção Básica | Cargos gerais' })[grupoDoCargo(cargo, papel)];
-  return fluxos.find((f) => f.nome === nome && f.ativo)?.id ?? null;
+/** Fluxo sugerido para um cadastro: o mais usado por quem tem o mesmo cargo; senão, o mais usado no mesmo tipo de acesso */
+function sugerirFluxo(lista: Usuario[] | null, fluxos: FluxoResumo[], cargo: string, papel: Papel) {
+  const ativos = new Set(fluxos.filter((f) => f.ativo).map((f) => f.id));
+  const maisUsado = (pessoas: Usuario[]) => {
+    const conta = new Map<string, number>();
+    for (const u of pessoas) if (u.fluxo_id && ativos.has(u.fluxo_id)) conta.set(u.fluxo_id, (conta.get(u.fluxo_id) ?? 0) + 1);
+    return [...conta.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? null;
+  };
+  const c = normalizar(cargo.trim());
+  const pessoas = (lista ?? []).filter((u) => u.ativo);
+  return (c && maisUsado(pessoas.filter((u) => normalizar(u.cargo ?? '') === c)))
+    || maisUsado(pessoas.filter((u) => u.papel === papel)) || null;
 }
 
 export default function AdminUsuarios({ meuId }: { meuId: string }) {
@@ -134,7 +142,7 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
     const nome = fluxoLote === 'sem' ? 'sem fluxo (só a Direção)' : nomeFluxo(fluxoLote);
     setMarcados(new Set());
     setFluxoLote('');
-    concluir(`Fluxo "${nome}" aplicado a ${ids.length} ${ids.length === 1 ? 'pessoa' : 'pessoas'}. Os pedidos que ainda aguardam assinatura passam a seguir o fluxo novo (as assinaturas já feitas continuam valendo).`);
+    concluir(`Fluxo "${nome}" aplicado a ${ids.length} ${ids.length === 1 ? 'pessoa' : 'pessoas'}. Vale para os próximos pedidos.`);
   }
 
   function concluir(msg: string) {
@@ -251,7 +259,7 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
           <button type="button" onClick={() => setVersao((v) => v + 1)} className="dock-btn-ghost !px-4 text-xs font-semibold">
             <RefreshCw className="size-3.5" aria-hidden /> Atualizar
           </button>
-          <button type="button" onClick={() => { setNovo({ ...NOVO, senha: gerarSenhaTemporaria() }); limpar(); }} className="dock-btn-primary text-xs font-semibold">
+          <button type="button" onClick={() => { setNovo({ ...NOVO, senha: gerarSenhaTemporaria(), fluxo_id: sugerirFluxo(lista, fluxos, '', 'funcionario') }); limpar(); }} className="dock-btn-primary text-xs font-semibold">
             <Plus className="size-4" aria-hidden /> Novo usuário
           </button>
         </div>
@@ -296,13 +304,16 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
         </div>
       )}
 
-      {novo && (
-        <div className="dock-card border-2 !border-electric-cobalt/30 bg-powder-blue/10 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-linha pb-3">
-            <h3 className="text-sm font-bold text-ink-charcoal">Novo usuário</h3>
-            <span className="text-xs text-slate-gray">A senha inicial é temporária: a pessoa troca no primeiro acesso</span>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <Janela aberta={!!novo} onFechar={() => { setNovo(null); setErro(null); }} titulo="Novo usuário"
+        subtitulo="A senha inicial é temporária: a pessoa troca no primeiro acesso"
+        rodape={<>
+          <Botao variante="discreto" onClick={() => { setNovo(null); setErro(null); }}>Cancelar</Botao>
+          <Botao carregando={ocupado === 'novo'} onClick={salvarNovo}>Criar acesso</Botao>
+        </>}>
+        {novo && (
+          <>
+            {erro && <div className="mb-3"><Aviso>{erro}</Aviso></div>}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Campo rotulo="Nome completo *"><input value={novo.nome} maxLength={150} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} className={inputCls} /></Campo>
             <Campo rotulo="Matrícula (login) *"><input value={novo.matricula} maxLength={40} onChange={(e) => setNovo({ ...novo, matricula: e.target.value })} className={inputCls} autoComplete="off" /></Campo>
             <Campo rotulo="Senha inicial *" dica="Letras e números, mínimo 8">
@@ -315,10 +326,10 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
               </div>
             </Campo>
             <Campo rotulo="Cargo"><input list="cargos" value={novo.cargo} maxLength={120} className={inputCls}
-              onChange={(e) => setNovo({ ...novo, cargo: e.target.value, fluxo_id: sugerirFluxo(fluxos, e.target.value, novo.papel) })} /></Campo>
+              onChange={(e) => setNovo({ ...novo, cargo: e.target.value, fluxo_id: sugerirFluxo(lista, fluxos, e.target.value, novo.papel) })} /></Campo>
             <Campo rotulo="Tipo de acesso" dica={PAPEIS[novo.papel].descricao}>
               <Escolha valor={novo.papel} rotulo="Tipo de acesso" opcoes={opcoesPapel}
-                onChange={(v) => { const papel = v as Papel; setNovo({ ...novo, papel, fluxo_id: sugerirFluxo(fluxos, novo.cargo, papel) }); }} />
+                onChange={(v) => { const papel = v as Papel; setNovo({ ...novo, papel, fluxo_id: sugerirFluxo(lista, fluxos, novo.cargo, papel) }); }} />
             </Campo>
             <Campo rotulo="Quem assina os pedidos dele(a)" dica="Fluxo de assinatura. Dá para mudar depois, inclusive de vários de uma vez.">
               <Escolha valor={novo.fluxo_id ?? ''} onChange={(v) => setNovo({ ...novo, fluxo_id: v || null })} rotulo="Fluxo de assinatura"
@@ -335,12 +346,9 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
               <UnidadesSupervisor papel={novo.papel} lotacao={novo.unidade_id} unidades={unidadesAtivas} marcadas={novo.supervisiona} onChange={(v) => setNovo({ ...novo, supervisiona: v })} />
             )}
           </div>
-          <div className="mt-4 flex items-center justify-end gap-2 border-t border-linha pt-3">
-            <Botao variante="discreto" onClick={() => setNovo(null)}>Cancelar</Botao>
-            <Botao carregando={ocupado === 'novo'} onClick={salvarNovo}>Criar acesso</Botao>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Janela>
 
       {!lista ? (
         <div className="dock-card p-12 text-center text-xs text-slate-gray">
