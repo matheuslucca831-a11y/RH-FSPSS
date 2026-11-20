@@ -25,7 +25,8 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
   const [vaga, setVaga] = useState<string>(() =>
     item.como === 'substituto' ? item.ausentes.find((i) => item.vagas.includes(i)) ?? item.vagas[0] ?? '' : item.vagas[0] ?? '');
   const [motivo, setMotivo] = useState<MotivoAusencia | ''>('');
-  const [sozinho, setSozinho] = useState(false);
+  /** gozo: folga para gozo imediato (outra chefia ausente e ciente); justificado: segue só com esta assinatura, com justificativa */
+  const [modo, setModo] = useState<'' | 'gozo' | 'justificado'>('');
   const [ocupado, setOcupado] = useState<'sim' | 'nao' | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [senha, setSenha] = useState('');
@@ -35,12 +36,15 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
   const direta = item.como === 'direcao_direta';
   const regraUm = et?.regra === 'um';
   const outra = s.pendentes.find((v) => v !== vaga);
-  const podeSozinho = titular && s.categoria === 'folga' && s.gozo_imediato && !!et?.gozo_imediato && !regraUm
+  const podeGozo = titular && s.categoria === 'folga' && s.gozo_imediato && !!et?.gozo_imediato && !regraUm
     && s.pendentes.length === 2 && !!outra;
+  const podeJustificar = titular && !regraUm && s.pendentes.length > 1;
+  const outros = s.pendentes.filter((v) => v !== vaga).map(rotuloDe).join(' e ');
+  const sozinho = modo !== '';
 
   // Precisa declarar o motivo da ausência (quando ela não está registrada no sistema)?
   const pedeMotivo = substituto ? (regraUm ? item.precisa_motivo : !!vaga && !item.ausentes.includes(vaga))
-    : podeSozinho && sozinho ? !item.ausentes.includes(outra!)
+    : modo === 'gozo' ? !item.ausentes.includes(outra!)
     : false;
   const ausenteDe = substituto
     ? (regraUm && s.pendentes.length > 1 ? s.pendentes.map(rotuloDe).join(' e ') : rotuloDe(vaga))
@@ -58,16 +62,17 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
     if (direta && !obs.trim()) return setErro('Explique por que a Direção decide sem as assinaturas pendentes.');
     if (substituto && !vaga) return setErro('Escolha no lugar de quem você assina.');
     if (aprovar && pedeMotivo && !motivo) return setErro(`Informe por que ${ausenteDe} está ausente.`);
+    if (aprovar && modo === 'justificado' && obs.trim().length < 5) return setErro('Escreva a justificativa para o pedido seguir só com a sua assinatura.');
     setErro(null);
     setOcupado(aprovar ? 'sim' : 'nao');
     const supabase = createClient();
     const a = await autorizarComSenha(supabase, senha);
     if (a.erro) { setOcupado(null); return setErro(a.erro); }
     const { data, error } = await supabase.rpc('assinar', {
-      p_id: s.id, p_aprovar: aprovar, p_obs: obs.trim() || null,
+      p_id: s.id, p_aprovar: aprovar, p_obs: modo === 'gozo' && aprovar ? null : obs.trim() || null,
       p_no_lugar_de: direta ? null : vaga || null,
       p_motivo_ausencia: pedeMotivo || (!aprovar && motivo) ? motivo || null : null,
-      p_outra_ciente: podeSozinho && sozinho,
+      p_outra_ciente: aprovar && sozinho,
       p_token: a.token,
     });
     setOcupado(null);
@@ -114,7 +119,7 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
           {' · '}{titular ? `você assina como ${item.rotulos.join(' / ')}` : substituto ? `você assina como ${rotuloVaga(et.substituto!)}` : 'decisão da Direção'}
         </p>
       )}
-      {(substituto || podeSozinho || direta || escolhaVaga) && (
+      {(substituto || podeGozo || direta || escolhaVaga) && (
         <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-warning/25 bg-warning-light/40 p-3.5 text-sm">
           {direta && (
             <div className="w-full space-y-2">
@@ -144,9 +149,9 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
                 }))} />
             </label>
           )}
-          {podeSozinho && (
+          {podeGozo && (
             <label className="flex w-full items-start gap-2">
-              <input type="checkbox" checked={sozinho} onChange={(e) => setSozinho(e.target.checked)} className="mt-0.5 size-4 accent-electric-cobalt" />
+              <input type="checkbox" checked={modo === 'gozo'} onChange={(e) => setModo(e.target.checked ? 'gozo' : '')} className="mt-0.5 size-4 accent-electric-cobalt" />
               <span>
                 <strong>Folga para gozo imediato:</strong> assinar sozinho(a). {outra ? rotuloDe(outra) : 'A outra chefia'} está ausente,
                 houve consenso prévio e está ciente.
@@ -162,6 +167,25 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
           )}
           {!pedeMotivo && substituto && (
             <p className="text-xs text-tinta-suave">Ausência registrada no sistema: não é preciso declarar o motivo.</p>
+          )}
+        </div>
+      )}
+      {podeJustificar && (
+        <div className={`rounded-2xl border p-3.5 text-sm ${modo === 'justificado' ? 'border-electric-cobalt/30 bg-lavender-mist/50' : 'border-linha bg-faint-gray/40'}`}>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" checked={modo === 'justificado'} onChange={(e) => setModo(e.target.checked ? 'justificado' : '')}
+              className="mt-0.5 size-4 accent-electric-cobalt" />
+            <span>
+              <strong>Seguir só com a minha assinatura</strong>
+              <span className="block text-xs text-tinta-suave">O pedido não espera {outros || 'as outras assinaturas'}{ultima ? ' e é aprovado' : ` e vai para: ${proxima?.nome}`}. A justificativa fica no histórico e no documento.</span>
+            </span>
+          </label>
+          {modo === 'justificado' && (
+            <label className="mt-2 block">
+              <span className="text-xs font-semibold text-tinta-suave">Justificativa *</span>
+              <textarea rows={2} value={obs} onChange={(e) => setObs(e.target.value)} maxLength={1000} className={`${inputCls} mt-1`}
+                placeholder={`Ex.: ${outros || 'a outra chefia'} sem acesso ao sistema esta semana; combinado por telefone`} />
+            </label>
           )}
         </div>
       )}
