@@ -89,7 +89,7 @@ export default function AdminFluxos() {
     if (error) return setErro(error.code === '23505' ? 'Já existe um fluxo com esse nome.' : mensagemErro(error));
     setEditando(null);
     concluir(editando.id
-      ? `Fluxo "${dados.nome}" salvo. Vale para os próximos pedidos.`
+      ? `Fluxo "${dados.nome}" salvo. Os pedidos que ainda aguardam assinatura passam a seguir o fluxo novo (as assinaturas já feitas continuam valendo).`
       : `Fluxo "${dados.nome}" criado. Agora aplique a quem ele vale em Usuários (dá para marcar vários de uma vez).`);
   }
 
