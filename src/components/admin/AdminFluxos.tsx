@@ -5,11 +5,12 @@ import { ArrowDown, ArrowUp, Copy, GitBranch, Pencil, Plus, Power, RefreshCw, Tr
 import { createClient } from '@/lib/supabase/client';
 import { mensagemErro, normalizar } from '@/lib/formato';
 import {
-  CARGOS_UNIDADE, CATEGORIAS, PAPEIS_ASSINANTES, TIPOS_VAGA, quemAssina, rotuloVaga,
+  CARGOS_UNIDADE, CATEGORIAS, PAPEIS_ASSINANTES, TIPOS_VAGA, quemAssina,
   type Categoria, type Etapa, type Fluxo, type Rotas, type TipoVaga, type VagaFluxo,
 } from '@/lib/solicitacoes';
 import Escolha, { type Opcao } from '@/components/Escolha';
 import { Aviso, Botao, Campo, CampoBusca, inputCls } from '@/components/ui';
+import DiagramaCaminho from './DiagramaCaminho';
 
 type Pessoa = { id: string; nome: string; matricula: string; cargo: string | null; fluxo_id: string | null; ativo: boolean };
 
@@ -163,8 +164,9 @@ export default function AdminFluxos() {
                       {contagem[f.id] ?? 0} {(contagem[f.id] ?? 0) === 1 ? 'pessoa' : 'pessoas'}{f.ativo ? '' : ' | desativado'}
                     </span>
                   </div>
-                  <ResumoCaminho titulo="Padrão" etapas={f.rotas.padrao} nomes={nomes} />
-                  {proprios.map((c) => <ResumoCaminho key={c} titulo={CATEGORIAS[c].titulo} etapas={f.rotas[c]!} nomes={nomes} />)}
+                  {agruparCaminhos(f.rotas, proprios).map((g) => (
+                    <ResumoCaminho key={g.titulo} titulo={g.titulo} etapas={g.etapas} nomes={nomes} />
+                  ))}
                   <div className="flex flex-wrap gap-1.5 border-t border-linha pt-3">
                     <AcaoFluxo icone={Pencil} rotulo="Editar" onClick={() => { setEditando(structuredClone(f)); setOk(null); setErro(null); }} />
                     <AcaoFluxo icone={Copy} rotulo="Duplicar" onClick={() => {
@@ -188,21 +190,30 @@ export default function AdminFluxos() {
   );
 }
 
+/** Junta os tipos de pedido que têm o mesmo caminho (ex.: "Folga, Férias e Cancelamento") */
+function agruparCaminhos(rotas: Rotas, proprios: Categoria[]) {
+  const chave = (e: Etapa[]) => JSON.stringify(limparRotas({ padrao: e }).padrao);
+  const grupos = new Map<string, { nomes: string[]; etapas: Etapa[] }>();
+  grupos.set(chave(rotas.padrao), { nomes: ['Demais pedidos'], etapas: rotas.padrao });
+  for (const c of proprios) {
+    const k = chave(rotas[c]!);
+    const g = grupos.get(k);
+    if (g) g.nomes.push(CATEGORIAS[c].titulo);
+    else grupos.set(k, { nomes: [CATEGORIAS[c].titulo], etapas: rotas[c]! });
+  }
+  const lista = (n: string[]) => (n.length > 1 ? `${n.slice(0, -1).join(', ')} e ${n.at(-1)}` : n[0]);
+  return [...grupos.values()].map((g) => {
+    // "Demais pedidos" vai para o fim do nome do grupo e some se for o único caminho
+    const nomes = [...g.nomes.filter((n) => n !== 'Demais pedidos'), ...g.nomes.filter((n) => n === 'Demais pedidos')];
+    return { titulo: proprios.length === 0 ? 'Todos os pedidos' : lista(nomes), etapas: g.etapas };
+  });
+}
+
 function ResumoCaminho({ titulo, etapas, nomes }: { titulo: string; etapas: Etapa[]; nomes: Record<string, string> }) {
   return (
     <div className="text-xs">
-      <p className="font-semibold text-slate-gray">{titulo}</p>
-      <ol className="mt-1 flex flex-wrap items-center gap-1.5">
-        {etapas.map((e, i) => (
-          <li key={i} className="flex items-center gap-1.5">
-            {i > 0 && <span className="text-slate-gray" aria-hidden>→</span>}
-            <span className="rounded-lg border border-linha bg-faint-gray/60 px-2 py-1 text-ink-charcoal">
-              {quemAssina(e, nomes)}
-              {e.substituto && <span className="text-slate-gray"> | ausência: {rotuloVaga(e.substituto, nomes)}</span>}
-            </span>
-          </li>
-        ))}
-      </ol>
+      <p className="mb-1.5 font-semibold text-slate-gray">{titulo}</p>
+      <DiagramaCaminho etapas={etapas} nomes={nomes} compacto />
     </div>
   );
 }
@@ -273,11 +284,20 @@ function Editor({ valor, onChange, pessoas, nomes, salvando, onSalvar, onCancela
         </div>
       </div>
 
-      <div className="mt-4 space-y-3">
+      {/* Desenho do caminho: atualiza enquanto a pessoa edita */}
+      <section className="mt-4 rounded-2xl border border-electric-cobalt/15 bg-lavender-mist/40 p-4 sm:p-5" aria-label="Como fica o caminho">
+        <p className="mb-3 text-sm font-bold text-ink-charcoal">
+          Como fica: {aba === 'padrao' ? 'pedidos em geral' : CATEGORIAS[aba].titulo.toLowerCase()}
+          {aba !== 'padrao' && !caminho && <span className="font-normal text-slate-gray"> (igual ao padrão)</span>}
+        </p>
+        <DiagramaCaminho etapas={caminho ?? valor.rotas.padrao} nomes={nomes} />
+      </section>
+
+      <p className="mt-5 text-xs font-semibold text-slate-gray">{caminho ? 'Editar as etapas' : ''}</p>
+      <div className="mt-2 space-y-3">
         {aba !== 'padrao' && !caminho ? (
           <div className="rounded-2xl border border-dashed border-linha bg-faint-gray/40 p-5 text-sm text-slate-gray">
-            <p><strong className="text-ink-charcoal">{CATEGORIAS[aba].titulo}</strong> segue o caminho padrão:</p>
-            <div className="mt-2"><ResumoCaminho titulo="Padrão" etapas={valor.rotas.padrao} nomes={nomes} /></div>
+            <p><strong className="text-ink-charcoal">{CATEGORIAS[aba].titulo}</strong> segue o mesmo caminho dos pedidos em geral (desenho acima).</p>
             <Botao variante="secundario" className="mt-3" onClick={() => setCaminho(structuredClone(valor.rotas.padrao))}>
               <Plus className="size-4" aria-hidden /> Criar um caminho próprio para {CATEGORIAS[aba].titulo.toLowerCase()}
             </Botao>
