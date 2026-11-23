@@ -143,5 +143,8 @@ Em `.claude/skills/`, trazidas do ECC (MIT) com uma nota "Neste projeto" no topo
 - Não reverter decisões já tomadas com o Matheus: assinatura **só com senha** (sem desenho), selects trocados por `Escolha`,
   fluxos configuráveis em vez de regras fixas, opção "seguir só com a minha assinatura" disponível em todos os fluxos.
 - Dados de funcionários são pessoais: não colar dados reais em issues, commits ou prints públicos.
-- Pendências conhecidas: Site URL do Supabase Auth e o secret `ALLOWED_ORIGINS` da `rh-usuarios` com o domínio do Vercel;
-  README desatualizado.
+- Segurança já configurada no painel do Supabase (nov/2026): Site URL = `https://siger-rh-fspss.vercel.app`;
+  secret `ALLOWED_ORIGINS` = os dois domínios do Vercel (`siger-rh-fspss` e `siger-rh`), por isso Administração de
+  usuários e comprovantes **não funcionam nas prévias** do Vercel ("Origem não autorizada"); cadastro público desligado;
+  senha mínima de 8 com letras e números, e troca de senha exige login recente.
+- Pendência conhecida: README desatualizado.
