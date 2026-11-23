@@ -11,6 +11,7 @@ import { contarFila } from '@/lib/fila';
 import { sairDoSistema, usePerfil } from '@/lib/contextoPerfil';
 import { rotasDo } from '@/lib/rotas';
 import { PAPEIS, type Perfil } from '@/lib/types';
+import Recado from '@/components/Recado';
 
 export const iniciais = (nome: string) => {
   const p = nome.trim().split(/\s+/).filter(Boolean);
@@ -274,6 +275,7 @@ export default function Shell({ perfil, children }: { perfil: Perfil; children: 
         </header>
 
         <main className="min-w-0 flex-1 p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8">{children}</main>
+        <Recado />
 
         {/* Navegação inferior no celular (zona do polegar) */}
         <nav aria-label="Navegação rápida"

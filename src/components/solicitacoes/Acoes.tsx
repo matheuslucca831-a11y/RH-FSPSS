@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, ChevronDown, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { mensagemErro } from '@/lib/formato';
 import CampoAssinatura, { autorizarComSenha } from '@/components/assinatura/CampoAssinatura';
@@ -81,7 +81,7 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
     onFeito(
       !aprovar ? `Pedido de ${s.solicitante_nome} negado.`
         : data === 'Aprovado' ? `Pedido de ${s.solicitante_nome} aprovado.`
-        : restam ? `Você assinou o pedido de ${s.solicitante_nome}. Faltam as outras assinaturas da etapa.`
+        : restam ? `Você assinou o pedido de ${s.solicitante_nome}. Agora falta: ${outros}.`
         : `Pedido de ${s.solicitante_nome} assinado e enviado para: ${proxima?.nome ?? 'próxima etapa'}.`,
     );
   }
@@ -113,10 +113,10 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
   const escolhaVaga = (substituto && !regraUm && item.vagas.length > 1) || (titular && item.vagas.length > 1);
   return (
     <div className="w-full space-y-3">
-      {et && (
-        <p className="text-xs text-tinta-suave">
-          {total > 1 ? `Etapa ${(s.etapa_atual ?? 0) + 1} de ${total}: ` : ''}<strong className="text-ink-charcoal">{et.nome}</strong>
-          {' · '}{titular ? `você assina como ${item.rotulos.join(' / ')}` : substituto ? `você assina como ${rotuloVaga(et.substituto!)}` : 'decisão da Direção'}
+      {et && !direta && (
+        <p className="text-sm text-tinta-suave">
+          Você assina como <strong className="text-ink-charcoal">{titular ? item.rotulos.join(' / ') : rotuloVaga(et.substituto!)}</strong>.
+          {' '}{restam ? `Depois falta: ${outros}.` : ultima ? 'Com a sua assinatura, o pedido é aprovado.' : `Depois vai para: ${proxima?.nome}.`}
         </p>
       )}
       {(substituto || podeGozo || direta || escolhaVaga) && (
@@ -171,7 +171,11 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
         </div>
       )}
       {podeJustificar && (
-        <div className={`rounded-2xl border p-3.5 text-sm ${modo === 'justificado' ? 'border-electric-cobalt/30 bg-lavender-mist/50' : 'border-linha bg-faint-gray/40'}`}>
+        <details open={modo === 'justificado'} className="group text-sm">
+        <summary className="inline-flex min-h-[40px] cursor-pointer list-none items-center gap-1 rounded-full px-1 text-sm font-semibold text-electric-cobalt [&::-webkit-details-marker]:hidden">
+          <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden /> Outras opções
+        </summary>
+        <div className={`mt-1 rounded-2xl border p-3.5 ${modo === 'justificado' ? 'border-electric-cobalt/30 bg-lavender-mist/50' : 'border-linha bg-faint-gray/40'}`}>
           <label className="flex items-start gap-2">
             <input type="checkbox" checked={modo === 'justificado'} onChange={(e) => setModo(e.target.checked ? 'justificado' : '')}
               className="mt-0.5 size-4 accent-electric-cobalt" />
@@ -188,6 +192,7 @@ export function AcoesAssinatura({ s, item, onFeito }: { s: Solicitacao; item: It
             </label>
           )}
         </div>
+        </details>
       )}
       {blocoAssinatura}
       {erro && <p role="alert" className="w-full text-right text-sm text-erro">{erro}</p>}

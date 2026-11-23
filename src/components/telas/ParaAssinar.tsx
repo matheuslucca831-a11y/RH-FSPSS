@@ -12,12 +12,12 @@ import { Aviso, Cabecalho, Segmentos } from '@/components/ui';
 import ListaSolicitacoes from '@/components/solicitacoes/Lista';
 import { AcoesAssinatura, avisarMudanca } from '@/components/solicitacoes/Acoes';
 import { autorizarComSenha } from '@/components/assinatura/CampoAssinatura';
+import { mostrarRecado } from '@/components/Recado';
 
 type Visao = 'voce' | 'substituir' | 'andamento' | 'finalizadas';
 
-const EXPLICA = 'Quem assina cada pedido depende do fluxo de assinatura de quem pediu (definido pela Direção em "Fluxos de assinatura"). '
-  + 'Aqui aparecem os pedidos em que a sua assinatura é a próxima. Se você é substituto e a ausência do titular está registrada, '
-  + 'o pedido aparece em "Aguardando você"; sem registro, em "Substituição", declarando o motivo.';
+const EXPLICA = 'Aqui ficam os pedidos que esperam a sua assinatura. Leia, digite a sua senha e toque em Assinar (ou Negar, explicando o motivo). '
+  + 'Tem vários? Marque todos e assine de uma vez. Quem assina cada pedido é definido pela Direção.';
 
 /** Pode entrar no "assinar vários": assinatura simples, sem escolher substituição nem escrever motivo */
 const simples = (i?: ItemFila) => !!i && !i.precisa_motivo && i.como === 'titular' && i.vagas.length === 1;
@@ -89,20 +89,24 @@ export default function ParaAssinar({ perfil }: { perfil: Perfil }) {
     setMarcados(new Set());
     avisarMudanca();
     recarregar();
-    if (feitos) setOk(`${feitos} ${feitos === 1 ? 'pedido assinado' : 'pedidos assinados'}.`);
+    if (feitos) {
+      const m = `${feitos} ${feitos === 1 ? 'pedido assinado' : 'pedidos assinados'}.`;
+      setOk(m);
+      mostrarRecado(m);
+    }
     if (falhas.length) setErroLote(falhas.join(' | '));
   }
 
   const temSubstituicao = perfil.papel === 'direcao' || grupos.substituir.length > 0;
   const VISOES = [
     ['voce', 'Aguardando você'] as const,
-    ...(temSubstituicao ? [['substituir', perfil.papel === 'direcao' ? 'Decidir direto' : 'Substituição'] as const] : []),
+    ...(temSubstituicao ? [['substituir', perfil.papel === 'direcao' ? 'Parados nas unidades' : 'No lugar de ausente'] as const] : []),
     ['andamento', 'Em andamento'] as const,
     ...(!gestao ? [['finalizadas', 'Finalizadas'] as const] : []),
   ];
   const explicacao = visao === 'substituir'
     ? (perfil.papel === 'direcao'
-      ? 'Pedidos que esperam a assinatura de outras pessoas. Quando não houver quem assine, a Direção pode aprovar ou negar direto, informando o motivo.'
+      ? 'Pedidos que ainda esperam a chefia das unidades. Você não precisa fazer nada aqui. Só use se não houver quem assine (ex.: unidade sem chefia): aí a Direção pode aprovar ou negar direto, explicando o motivo.'
       : 'Pedidos em que a chefia titular não tem ausência registrada. Para assinar no lugar dela, declare o motivo (férias ou afastamento médico); isso fica no histórico.')
     : visao === 'andamento' ? 'Pedidos que esperam a assinatura de outra pessoa.'
     : EXPLICA;
@@ -158,7 +162,7 @@ export default function ParaAssinar({ perfil }: { perfil: Perfil }) {
             const item = grupos.fila.get(s.id);
             if (!item || (visao !== 'voce' && visao !== 'substituir')) return null;
             if (marcados.has(s.id)) return <span className="text-xs font-semibold text-electric-cobalt">Marcado para assinar junto</span>;
-            return <AcoesAssinatura s={s} item={item} onFeito={(m) => { setOk(m); recarregar(); }} />;
+            return <AcoesAssinatura s={s} item={item} onFeito={(m) => { setOk(m); mostrarRecado(m); recarregar(); }} />;
           }}
         />
       </div>

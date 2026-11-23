@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { abrirComprovante } from '@/lib/funcoes';
 import { dataHoraBR } from '@/lib/formato';
 import {
-  CATEGORIAS, dataCurta, frase, horarios, linhaDoTempo, periodo, rotuloTipo, type ItemHistorico, type Solicitacao,
+  CATEGORIAS, dataCurta, frase, fraseCurta, horarios, linhaDoTempo, periodo, rotuloTipo, type ItemHistorico, type Solicitacao,
 } from '@/lib/solicitacoes';
 import { Selo } from '@/components/ui';
 
@@ -29,6 +29,7 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
   const fim = s.situacao === 'Aprovado';
   const hs = horarios(s);
   const [histAberto, setHistAberto] = useState(false);
+  const situacaoTexto = mostrarSolicitante ? fraseCurta(s, !!acoes) : frase(s);
 
   return (
     <article className={`dock-card p-4 sm:p-5 ${selecao?.marcado ? '!border-electric-cobalt ring-2 ring-electric-cobalt/25' : destaque ? '!border-electric-cobalt/40 ring-1 ring-electric-cobalt/15' : s.situacao === 'Negado' ? '!border-danger/30' : ''}`}>
@@ -43,7 +44,7 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
         <div className="min-w-0">
           {mostrarSolicitante ? (
             <>
-              <h2 className="text-[15px] font-bold uppercase tracking-tight text-ink-charcoal">{s.solicitante_nome}</h2>
+              <h2 className="text-base font-bold tracking-tight text-ink-charcoal">{s.solicitante_nome}</h2>
               <p className="text-xs text-tinta-suave">
                 Matrícula: {s.solicitante_matricula ?? 'não informada'}{s.solicitante_cargo ? ` | ${s.solicitante_cargo}` : ''}{s.unidade_nome ? ` | ${s.unidade_nome}` : ''}
               </p>
@@ -139,24 +140,29 @@ export default function CartaoSolicitacao({ s, mostrarSolicitante = false, acoes
         </ul>
       )}
 
-      <p className={`mt-4 rounded-xl border px-4 py-2.5 text-sm ${parou ? (s.situacao === 'Negado' ? 'border-danger/20 bg-danger-light text-danger' : 'border-linha bg-faint-gray text-slate-gray') : fim ? 'border-forest/20 bg-forest-light text-forest' : 'border-linha bg-faint-gray text-mid-graphite'}`}>
-        {frase(s)}
-        {s.fluxo_nome && mostrarSolicitante && <span className="mt-0.5 block text-xs opacity-75">Fluxo: {s.fluxo_nome}</span>}
-      </p>
+      {situacaoTexto && <p className={`mt-4 rounded-xl border px-4 py-2.5 text-sm ${parou ? (s.situacao === 'Negado' ? 'border-danger/20 bg-danger-light text-danger' : 'border-linha bg-faint-gray text-slate-gray') : fim ? 'border-forest/20 bg-forest-light text-forest' : 'border-linha bg-faint-gray text-mid-graphite'}`}>
+        {situacaoTexto}
+      </p>}
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1">
           <Link href={`/comprovante?id=${s.id}`} className={linkCls}>
-            <FileSignature className="size-4" aria-hidden /> Documento assinado
+            <FileSignature className="size-4" aria-hidden /> Documento
           </Link>
           <BotaoAnexo s={s} />
           <button type="button" onClick={() => setHistAberto((v) => !v)} aria-expanded={histAberto} className={linkCls}>
             <ChevronDown className={`size-4 transition-transform ${histAberto ? 'rotate-180' : ''}`} aria-hidden />
-            Histórico
+            {mostrarSolicitante ? 'Detalhes' : 'Histórico'}
           </button>
         </div>
         {acoes && <div className="flex flex-wrap items-center justify-end gap-2">{acoes}</div>}
       </div>
+      {histAberto && mostrarSolicitante && (
+        <p className="mt-2 rounded-xl border border-linha bg-white px-3.5 py-2.5 text-sm text-mid-graphite">
+          {frase(s)}
+          {s.fluxo_nome && <span className="mt-0.5 block text-xs text-tinta-suave">Quem assina (modelo): {s.fluxo_nome}</span>}
+        </p>
+      )}
       {histAberto && <Historico id={s.id} />}
     </article>
   );

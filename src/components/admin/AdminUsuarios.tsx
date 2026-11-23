@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCheck, Clock, GitBranch, KeyRound, MapPin, Pencil, Plus, Power, RefreshCw, Smartphone, Users, Wand2, X } from 'lucide-react';
+import { CheckCheck, Clock, GitBranch, KeyRound, MapPin, MoreHorizontal, Pencil, Plus, Power, RefreshCw, Smartphone, Users, Wand2, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { dataHoraBR, mensagemErro, normalizar } from '@/lib/formato';
 import { matriculaValida } from '@/lib/login';
@@ -75,6 +75,7 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
   const [fluxoLote, setFluxoLote] = useState('');
   const [novo, setNovo] = useState<NovoUsuario | null>(null);
   const [editando, setEditando] = useState<Usuario | null>(null);
+  const [maisDe, setMaisDe] = useState<string | null>(null);
   const [senha, setSenha] = useState<{ id: string; valor: string } | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
 
@@ -453,13 +454,20 @@ export default function AdminUsuarios({ meuId }: { meuId: string }) {
                 {!ed && !sn && (
                   <div className="flex flex-wrap items-center gap-1.5 lg:justify-end">
                     <AcaoCartao icone={Pencil} rotulo="Editar" onClick={() => { setEditando(u); limpar(); }} />
-                    <AcaoCartao icone={KeyRound} rotulo="Senha" onClick={() => { setSenha({ id: u.id, valor: gerarSenhaTemporaria() }); limpar(); }} />
-                    {u.papel !== 'funcionario' && u.id !== meuId && (
-                      <AcaoCartao icone={Smartphone} rotulo="Novo celular" onClick={() => novoCelular(u)} />
-                    )}
-                    {u.id !== meuId && (
-                      <AcaoCartao icone={Power} rotulo={u.ativo ? 'Desativar' : 'Reativar'} perigo={u.ativo} onClick={() => alternarAtivo(u)} />
-                    )}
+                    {/* No celular, as outras ações ficam em "Mais" (evita tocar em Desativar sem querer) */}
+                    <button type="button" onClick={() => setMaisDe(maisDe === u.id ? null : u.id)} aria-expanded={maisDe === u.id}
+                      className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-linha bg-white px-3.5 py-1.5 text-xs font-semibold text-mid-graphite shadow-xs sm:hidden">
+                      <MoreHorizontal className="size-3.5" aria-hidden /> {maisDe === u.id ? 'Menos' : 'Mais'}
+                    </button>
+                    <span className={`${maisDe === u.id ? 'flex' : 'hidden'} w-full flex-wrap gap-1.5 sm:flex sm:w-auto`}>
+                      <AcaoCartao icone={KeyRound} rotulo="Senha" onClick={() => { setSenha({ id: u.id, valor: gerarSenhaTemporaria() }); limpar(); }} />
+                      {u.papel !== 'funcionario' && u.id !== meuId && (
+                        <AcaoCartao icone={Smartphone} rotulo="Novo celular" onClick={() => novoCelular(u)} />
+                      )}
+                      {u.id !== meuId && (
+                        <AcaoCartao icone={Power} rotulo={u.ativo ? 'Desativar' : 'Reativar'} perigo={u.ativo} onClick={() => alternarAtivo(u)} />
+                      )}
+                    </span>
                   </div>
                 )}
               </div>

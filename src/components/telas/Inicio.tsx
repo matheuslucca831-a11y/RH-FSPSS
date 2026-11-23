@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowRight, CalendarClock, DoorOpen, Fingerprint, PlusCircle, TreePalm } from 'lucide-react';
+import { ArrowRight, CalendarClock, CheckCircle2, DoorOpen, Fingerprint, PlusCircle, TreePalm } from 'lucide-react';
 import { iniciais } from '@/components/Shell';
 import { createClient } from '@/lib/supabase/client';
 import { useConsulta } from '@/lib/cacheTela';
@@ -53,16 +53,29 @@ export default function Inicio({ perfil }: { perfil: Perfil }) {
   const primeiroNome = perfil.nome.split(' ')[0];
   const local = perfil.unidade?.nome ?? (perfil.papel === 'funcionario' ? undefined : 'Sede');
 
-  const blocos: { rotulo: string; valor: number | null | undefined; href: string; forte?: boolean; texto: string }[] = [
-    ...(perfil.papel !== 'funcionario' || dados?.paraAssinar ? [{ rotulo: 'Aguardando a sua assinatura', valor: dados?.paraAssinar, href: '/aprovacoes', forte: true, texto: 'Assinar agora' }] : []),
-    ...(dados?.substituicao ? [{ rotulo: 'Para assinar como substituto', valor: dados.substituicao, href: '/aprovacoes', texto: 'Ver pedidos' }] : []),
-    ...(perfil.papel === 'direcao' || perfil.papel === 'coordenacao' ? [
-      { rotulo: 'Na primeira etapa', valor: dados?.paradasNaChefia, href: '/todas', texto: 'Em todas as unidades' },
-      { rotulo: 'Pedidos neste mês', valor: dados?.noMes, href: '/relatorios', texto: 'Ver relatório' },
+  // Quem assina pedidos (o RH só dá baixa; se um dia tiver algo para assinar, o destaque aparece mesmo assim)
+  const chefia = perfil.papel !== 'funcionario' && perfil.papel !== 'rh';
+  const direcao = perfil.papel === 'direcao';
+  const gestao = direcao || perfil.papel === 'coordenacao';
+  const n = (v: number | null | undefined) => v ?? 0;
+  const plural = (v: number, um: string, varios: string) => (v === 1 ? um : varios);
+  const pendentes = n(dados?.paraAssinar);
+
+  // Números de apoio, com frases simples (o principal, assinar, fica no destaque lá em cima)
+  const blocos: { rotulo: string; valor: number | null | undefined; href: string; texto: string }[] = [
+    ...(dados?.substituicao && !direcao ? [{ rotulo: 'Para assinar no lugar de quem está ausente', valor: dados.substituicao, href: '/aprovacoes', texto: 'Ver pedidos' }] : []),
+    ...(gestao ? [
+      { rotulo: 'Ainda com a chefia das unidades', valor: dados?.paradasNaChefia, href: '/todas', texto: 'Acompanhar' },
+      { rotulo: 'Pedidos feitos neste mês', valor: dados?.noMes, href: '/relatorios', texto: 'Ver relatório' },
     ] : []),
-    ...(perfil.papel === 'rh' || perfil.papel === 'direcao' ? [{ rotulo: 'Aprovados sem baixa no RH', valor: dados?.semBaixa, href: '/baixa', forte: perfil.papel === 'rh', texto: 'Dar baixa' }] : []),
-    { rotulo: 'Meus pedidos em análise', valor: dados?.minhasAbertas, href: '/minhas', texto: 'Acompanhar' },
+    ...(perfil.papel === 'rh' || direcao ? [{ rotulo: 'Aprovados esperando baixa do RH', valor: dados?.semBaixa, href: '/baixa', texto: 'Dar baixa' }] : []),
+    { rotulo: 'Seus pedidos em análise', valor: dados?.minhasAbertas, href: '/minhas', texto: 'Acompanhar' },
   ];
+
+  const atalhos = (['ponto', 'folga', 'ferias', 'saida'] as const).map((c) => ({
+    c, Icone: { ponto: Fingerprint, folga: CalendarClock, ferias: TreePalm, saida: DoorOpen }[c],
+    titulo: { ponto: 'Ocorrência de ponto', folga: 'Pedir folga', ferias: 'Pedir férias', saida: 'Saída antecipada' }[c],
+  }));
 
   return (
     <div className="w-full space-y-6">
@@ -76,44 +89,83 @@ export default function Inicio({ perfil }: { perfil: Perfil }) {
             <p className="mt-0.5 text-sm text-slate-gray">{PAPEIS[perfil.papel].rotulo}{local ? ` | ${local}` : ''}</p>
           </div>
         </div>
-        <Link href="/nova" className="dock-btn-primary self-start sm:self-auto"><PlusCircle className="size-4" aria-hidden /> Nova solicitação</Link>
+        {!chefia && <Link href="/nova" className="dock-btn-primary self-start sm:self-auto"><PlusCircle className="size-4" aria-hidden /> Nova solicitação</Link>}
       </div>
 
       {erro && <Aviso>{erro}</Aviso>}
 
-      <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
-        {(['ponto', 'folga', 'ferias', 'saida'] as const).map((c) => {
-          const Icone = { ponto: Fingerprint, folga: CalendarClock, ferias: TreePalm, saida: DoorOpen }[c];
-          return (
+      {/* O que mais importa para quem assina: aparece primeiro */}
+      {(chefia || pendentes > 0) && (
+        !dados ? <div className="dock-card h-28 animate-pulse" aria-hidden />
+        : pendentes > 0 ? (
+          <Link href="/aprovacoes"
+            className="flex flex-col gap-4 rounded-3xl bg-electric-cobalt p-5 text-white shadow-lg transition-colors hover:bg-deep-cobalt sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <span className="flex items-center gap-4">
+              <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-3xl font-bold tabular-nums">{pendentes}</span>
+              <span>
+                <span className="block text-lg font-bold leading-tight">
+                  {plural(pendentes, `pedido espera a sua ${direcao ? 'decisão' : 'assinatura'}`, `pedidos esperam a sua ${direcao ? 'decisão' : 'assinatura'}`)}
+                </span>
+                <span className="mt-0.5 block text-sm text-white/80">Os mais antigos aparecem primeiro.</span>
+              </span>
+            </span>
+            <span className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full bg-white px-6 text-base font-bold text-electric-cobalt">
+              {direcao ? 'Ver agora' : 'Assinar agora'} <ArrowRight className="size-5" aria-hidden />
+            </span>
+          </Link>
+        ) : (
+          <div className="dock-card flex items-center gap-4 p-5">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-forest-light text-forest"><CheckCircle2 className="size-6" aria-hidden /></span>
+            <span>
+              <span className="block font-semibold text-ink-charcoal">Nada esperando a sua assinatura</span>
+              <span className="block text-sm text-slate-gray">Tudo em dia! Quando chegar um pedido, ele aparece aqui.</span>
+            </span>
+          </div>
+        )
+      )}
+
+      {chefia ? (
+        // Chefia também pede, mas é a tarefa secundária: atalhos menores
+        <section aria-label="Fazer um pedido" className="space-y-2">
+          <h2 className="text-sm font-semibold text-slate-gray">Fazer um pedido seu</h2>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {atalhos.map(({ c, Icone, titulo }) => (
+              <Link key={c} href={`/nova?tipo=${c}`}
+                className="flex min-h-[52px] items-center gap-2.5 rounded-2xl border border-linha bg-white px-3 py-2.5 text-sm font-semibold text-ink-charcoal transition-colors hover:border-electric-cobalt/40">
+                <Icone className="size-5 shrink-0 text-electric-cobalt" aria-hidden />
+                <span className="min-w-0 leading-tight">{titulo}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+          {atalhos.map(({ c, Icone, titulo }) => (
             <Link key={c} href={`/nova?tipo=${c}`}
               className="dock-card group flex items-center gap-4 p-5 transition-all hover:border-electric-cobalt/40">
               <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-lavender-mist text-electric-cobalt">
                 <Icone className="size-6" aria-hidden />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block font-semibold text-ink-charcoal">{{ ponto: 'Ocorrência de ponto', folga: 'Pedir folga', ferias: 'Pedir férias', saida: 'Saída antecipada' }[c]}</span>
+                <span className="block font-semibold text-ink-charcoal">{titulo}</span>
                 <span className="block text-sm text-slate-gray">{CATEGORIAS[c].descricao}</span>
               </span>
               <ArrowRight className="size-4 shrink-0 text-slate-gray transition-transform group-hover:translate-x-0.5" aria-hidden />
             </Link>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <dl className={`grid gap-4 ${blocos.length >= 3 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2'}`}>
-        {blocos.map((b) => {
-          const alerta = b.forte && (b.valor ?? 0) > 0;
-          return (
-            <Link key={b.rotulo} href={b.href}
-              className={`dock-card block p-5 transition-all hover:border-electric-cobalt/40 ${alerta ? '!border-electric-cobalt/40 ring-1 ring-electric-cobalt/15' : ''}`}>
-              <dt className="text-xs font-semibold text-slate-gray">{b.rotulo}</dt>
-              <dd className={`mt-1 text-3xl font-bold tabular-nums ${alerta ? 'text-electric-cobalt' : 'text-ink-charcoal'}`}>
-                {b.valor ?? <span className="inline-block h-8 w-10 animate-pulse rounded bg-linha/60 align-middle" />}
-              </dd>
-              <dd className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-electric-cobalt">{b.texto} <ArrowRight className="size-3.5" aria-hidden /></dd>
-            </Link>
-          );
-        })}
+      <dl className={`grid gap-3 sm:gap-4 ${blocos.length >= 3 ? 'grid-cols-2 lg:grid-cols-4' : blocos.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {blocos.map((b) => (
+          <Link key={b.rotulo} href={b.href} className="dock-card flex flex-col p-4 transition-all hover:border-electric-cobalt/40 sm:p-5">
+            <dd className="order-1 text-2xl font-bold tabular-nums text-ink-charcoal sm:text-3xl">
+              {b.valor ?? <span className="inline-block h-8 w-10 animate-pulse rounded bg-linha/60 align-middle" />}
+            </dd>
+            <dt className="order-2 mt-1 text-sm leading-snug text-mid-graphite">{b.rotulo}</dt>
+            <dd className="order-3 mt-auto inline-flex items-center gap-1 pt-2 text-xs font-semibold text-electric-cobalt">{b.texto} <ArrowRight className="size-3.5" aria-hidden /></dd>
+          </Link>
+        ))}
       </dl>
 
       <section className="space-y-3">

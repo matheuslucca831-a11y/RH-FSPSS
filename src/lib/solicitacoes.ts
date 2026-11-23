@@ -78,7 +78,7 @@ export const CARGOS_UNIDADE: Record<string, string> = {
   enfermeiro: 'Enfermeiro responsável da unidade', gerente: 'Gerente da unidade', supervisor: 'Supervisor da unidade',
 };
 export const TIPOS_VAGA: Record<TipoVaga, { rotulo: string; descricao: string }> = {
-  unidade: { rotulo: 'Chefia da unidade dele(a)', descricao: 'Enfermeiro, Gerente ou Supervisor da unidade de quem pede' },
+  unidade: { rotulo: 'Chefia da unidade', descricao: 'Enfermeiro, Gerente ou Supervisor da unidade de quem fez o pedido' },
   papel: { rotulo: 'Papel no sistema', descricao: 'Qualquer pessoa com o papel (ex.: Direção)' },
   cargo: { rotulo: 'Cargo do cadastro', descricao: 'Qualquer pessoa com o cargo escrito' },
   pessoa: { rotulo: 'Pessoa específica', descricao: 'Só essa pessoa assina' },
@@ -249,6 +249,16 @@ export function frase(s: Solicitacao) {
       return `${inicio}Aguardando ${falta(s)}${etapa}.`;
     }
   }
+}
+
+/** Frase curta para quem vai analisar: quem já assinou e quem falta, sem "etapa" nem "fluxo" */
+export function fraseCurta(s: Solicitacao, semFalta = false) {
+  if (!emAnalise(s) || !s.rota) return frase(s);
+  const ass = [...(s.assinaturas ?? [])].sort((a, b) => a.criado_em.localeCompare(b.criado_em));
+  const ja = ass.length ? `Já assinou: ${ass.map((a) => a.nome.split(' ')[0]).join(', ')}.` : '';
+  if (semFalta) return ja; // quem vai assinar já vê o que falta logo abaixo, junto dos botões
+  const f = falta(s).replace(/^a assinatura de /, '').replace(/^a assinatura$/, 'assinatura');
+  return `${ja ? `${ja} ` : ''}Falta: ${f}.`;
 }
 
 /** Nome de arquivo seguro para o Storage */
