@@ -132,6 +132,12 @@ Um jeito que funciona: PostgREST local (binário do GitHub) sobre o Postgres de 
 3. Commit em português, explicando o porquê; push na `main` → Vercel publica.
 4. Edge Function alterada → republicar pelo MCP com `verify_jwt: false`.
 
+## Skills do projeto
+
+Em `.claude/skills/`, trazidas do ECC (MIT) com uma nota "Neste projeto" no topo de cada uma:
+`postgres-patterns`, `security-review`, `react-patterns`, `react-performance`, `frontend-a11y`, `e2e-testing`,
+`typescript-patterns`. Em conflito, vale este arquivo.
+
 ## Cuidado
 
 - Não reverter decisões já tomadas com o Matheus: assinatura **só com senha** (sem desenho), selects trocados por `Escolha`,
