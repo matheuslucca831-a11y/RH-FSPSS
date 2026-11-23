@@ -13,7 +13,7 @@ as chefias assinam eletronicamente (com senha), a Direção decide quando precis
 
 ## Stack
 
-- Next.js **15.4** com `output: 'export'` (site 100% estático, sem servidor), React 19, TypeScript, Tailwind CSS **v4**, lucide-react, qrcode.
+- Next.js **15.5** com `output: 'export'` (site 100% estático, sem servidor), React 19, TypeScript, Tailwind CSS **v4**, lucide-react, qrcode.
 - `@supabase/ssr` no navegador (`src/lib/supabase/client.ts`). **Toda regra de acesso fica no banco** (RLS + funções `security definer`).
 - Edge Functions (Deno) em `supabase/functions/`: `rh-usuarios` (criar/alterar acessos, só Direção) e `rh-comprovante` (link temporário do anexo). Publicadas com `verify_jwt: false` porque validam o token por conta própria.
 
